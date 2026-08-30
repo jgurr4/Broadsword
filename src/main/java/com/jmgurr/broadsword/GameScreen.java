@@ -4,6 +4,8 @@ import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
 import com.badlogic.gdx.Screen;
 import com.badlogic.gdx.graphics.Texture;
+import com.badlogic.gdx.graphics.g2d.BitmapFont;
+import com.badlogic.gdx.graphics.g2d.GlyphLayout;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 
@@ -20,10 +22,12 @@ public class GameScreen implements Screen {
     private final Texture sprites;
     private final TextureRegion[] tileRegions;
 
+    private final BitmapFont font = new BitmapFont();
+    private final GlyphLayout layout = new GlyphLayout();
     private float stepTimer = 0;
-    private float prevWorldX, prevWorldY; // world tile coords, float
     private boolean interpolating = false;
     private float interpProgress = 1;
+    private Link.Dir interpolatingDir = null; // dir of the in-flight step
     private Link.Dir desired = null;
 
     public GameScreen(BroadswordGame game) {
@@ -57,9 +61,8 @@ public class GameScreen implements Screen {
                     // crossed a screen edge: no slide animation across the seam
                     interpolating = false;
                 } else {
-                    prevWorldX = link.worldTileX() - desired.dx;
-                    prevWorldY = link.worldTileY() - desired.dy;
                     interpolating = true;
+                    interpolatingDir = desired;
                     interpProgress = 0;
                 }
                 stepTimer = 0;
@@ -92,17 +95,19 @@ public class GameScreen implements Screen {
 
     private void draw() {
         SpriteBatch b = game.batch();
+        b.setProjectionMatrix(game.viewport().getCamera().combined);
         b.begin();
         float linkPxX, linkPxY;
         if (interpolating) {
-            float tx = link.worldTileX(), ty = link.worldTileY();
-            float fx = prevWorldX + (tx - prevWorldX) * interpProgress;
-            float fy = prevWorldY + (ty - prevWorldY) * interpProgress;
+            // interpolation only happens within one screen: screen-local start + progress
+            Link.Dir d = interpolatingDir;
+            float fx = link.tx - d.dx + d.dx * interpProgress;
+            float fy = link.ty - d.dy + d.dy * interpProgress;
             linkPxX = fx * GameConfig.TILE;
-            linkPxY = (World.WORLD_H * World.SCREEN_H - 1 - fy) * GameConfig.TILE;
+            linkPxY = (World.SCREEN_H - 1 - fy) * GameConfig.TILE;
         } else {
-            linkPxX = link.worldTileX() * GameConfig.TILE;
-            linkPxY = (World.WORLD_H * World.SCREEN_H - 1 - link.worldTileY()) * GameConfig.TILE;
+            linkPxX = link.tx * GameConfig.TILE;
+            linkPxY = (World.SCREEN_H - 1 - link.ty) * GameConfig.TILE;
         }
         for (int y = 0; y < World.SCREEN_H; y++) {
             for (int x = 0; x < World.SCREEN_W; x++) {
@@ -124,6 +129,12 @@ public class GameScreen implements Screen {
         for (int i = 0; i < GameConfig.MIN_MAGIC; i++) {
             b.draw(TextureGen.region(ui, 1), 3 + i * 12, GameConfig.VIEW_H - 26);
         }
+        // dev readout: screen:tiles and the direction the input layer sees
+        String dbg = String.format("%d:%d %d:%d %s", link.sx, link.sy, link.tx, link.ty,
+                desired == null ? "-" : desired.name());
+        layout.setText(font, dbg);
+        // y-up camera: y is the text baseline
+        font.draw(b, dbg, GameConfig.VIEW_W - layout.width - 2, GameConfig.VIEW_H - 10);
         b.end();
     }
 
@@ -137,6 +148,7 @@ public class GameScreen implements Screen {
 
     @Override
     public void resize(int width, int height) {
+        game.viewport().update(width, height);
     }
 
     @Override

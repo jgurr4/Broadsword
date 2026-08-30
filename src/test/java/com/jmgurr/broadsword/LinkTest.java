@@ -45,11 +45,20 @@ class LinkTest {
     }
 
     @Test
+    void upDecreasesTileRow() {
+        // pins the y-down data convention: UP must move to a lower row index
+        Link l = new Link(World.SPAWN_SX, World.SPAWN_SY, World.SPAWN_TX, World.SPAWN_TY);
+        assertTrue(l.step(w, Link.Dir.UP)); // spawn 3x3 area is cleared
+        assertEquals(World.SPAWN_TY - 1, l.ty);
+    }
+
+    @Test
     void blockedByObstacle() {
         Link l = new Link(World.SPAWN_SX, World.SPAWN_SY, World.SPAWN_TX, World.SPAWN_TY);
-        w.screen(l.sx, l.sy).set(l.tx, l.ty + 1, Tile.ROCK);
+        // y-down: UP is the row above = ty - 1
+        w.screen(l.sx, l.sy).set(l.tx, l.ty - 1, Tile.ROCK);
         assertFalse(l.step(w, Link.Dir.UP));
-        assertEquals(l.tx, l.tx);
+        assertEquals(World.SPAWN_TY, l.ty);
     }
 
     @Test
@@ -70,20 +79,19 @@ class LinkTest {
     @Test
     void worldBorderBlocks() {
         World border = new World(2L);
+        // y-down: sy=0 is the north screen row, sy=WORLD_H-1 is the south screen row
         border.screen(0, 0).set(0, 0, Tile.GRASS);
-        border.screen(0, 0).set(0, World.SCREEN_H - 1, Tile.GRASS);
-        // west and south edges of the world
         Link l = new Link(0, 0, 0, 0);
-        assertFalse(l.step(border, Link.Dir.LEFT));
-        assertFalse(l.step(border, Link.Dir.DOWN));
+        assertFalse(l.step(border, Link.Dir.UP));    // north world edge
+        assertFalse(l.step(border, Link.Dir.LEFT));  // west world edge
         assertEquals(0, l.sx);
         assertEquals(0, l.sy);
         assertEquals(0, l.tx);
         assertEquals(0, l.ty);
-        // north edge of the world (top screen row, top tile row)
+        // south edge: bottom screen row, bottom tile row
         border.screen(0, World.WORLD_H - 1).set(0, World.SCREEN_H - 1, Tile.GRASS);
         Link l2 = new Link(0, World.WORLD_H - 1, 0, World.SCREEN_H - 1);
-        assertFalse(l2.step(border, Link.Dir.UP));
+        assertFalse(l2.step(border, Link.Dir.DOWN));
         assertEquals(World.SCREEN_H - 1, l2.ty);
     }
 

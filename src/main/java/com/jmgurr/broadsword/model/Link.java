@@ -3,7 +3,8 @@ package com.jmgurr.broadsword.model;
 /** The hero. Position is always a tile coordinate; no physics. */
 public class Link {
     public enum Dir {
-        UP(0, 1), DOWN(0, -1), LEFT(-1, 0), RIGHT(1, 0);
+        // y-down data: +tx = right, +ty = down the screen
+        UP(0, -1), DOWN(0, 1), LEFT(-1, 0), RIGHT(1, 0);
 
         public final int dx;
         public final int dy;
