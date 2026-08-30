@@ -9,7 +9,7 @@ import com.badlogic.gdx.utils.viewport.ScalingViewport;
 
 public class BroadswordGame extends Game {
     private SpriteBatch batch;
-    private final ScalingViewport viewport = new ScalingViewport(Scaling.fit, GameConfig.VIEW_W, GameConfig.VIEW_H);
+    private final ScalingViewport viewport = new ScalingViewport(Scaling.fit, GameConfig.LOGICAL_W, GameConfig.LOGICAL_H);
     private Texture tiles;
     private Texture ui;
     private Texture sprites;
@@ -18,7 +18,7 @@ public class BroadswordGame extends Game {
     public void create() {
         // The 1.14 viewport centers its projection on camera.position; the
         // camera is y-up by default. Position it at the world center.
-        viewport.getCamera().position.set(GameConfig.VIEW_W / 2f, GameConfig.VIEW_H / 2f, 0);
+        viewport.getCamera().position.set(GameConfig.LOGICAL_W / 2f, GameConfig.LOGICAL_H / 2f, 0);
         batch = new SpriteBatch();
         tiles = TextureGen.tiles();
         ui = TextureGen.ui();

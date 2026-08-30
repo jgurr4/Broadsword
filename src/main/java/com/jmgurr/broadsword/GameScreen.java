@@ -122,19 +122,21 @@ public class GameScreen implements Screen {
             }
         }
         b.draw(sprites, linkPxX, linkPxY, GameConfig.TILE, GameConfig.TILE);
-        // HUD: hearts top-left, magic below
-        for (int i = 0; i < 3; i++) {
-            b.draw(TextureGen.region(ui, 0), 3 + i * 12, GameConfig.VIEW_H - 15);
+        // HUD: hearts top-left, magic below (both inset from the top edge)
+        for (int i = 0; i < GameConfig.MAX_HEARTS; i++) {
+            b.draw(TextureGen.region(ui, 0), 3 + i * 12, GameConfig.LOGICAL_H - 19);
         }
-        for (int i = 0; i < GameConfig.MIN_MAGIC; i++) {
-            b.draw(TextureGen.region(ui, 1), 3 + i * 12, GameConfig.VIEW_H - 26);
+        for (int i = 0; i < GameConfig.MAX_MAGIC; i++) {
+            b.draw(TextureGen.region(ui, 1), 3 + i * 12, GameConfig.LOGICAL_H - 38);
         }
         // dev readout: screen:tiles and the direction the input layer sees
         String dbg = String.format("%d:%d %d:%d %s", link.sx, link.sy, link.tx, link.ty,
                 desired == null ? "-" : desired.name());
         layout.setText(font, dbg);
-        // y-up camera: y is the text baseline
-        font.draw(b, dbg, GameConfig.VIEW_W - layout.width - 2, GameConfig.VIEW_H - 10);
+        // y-up camera: y is the text baseline; place by ascent so the glyph tops
+        // sit 2px below the top edge, 4px in from the right edge
+        float textY = GameConfig.LOGICAL_H - font.getAscent() - 2;
+        font.draw(b, dbg, GameConfig.LOGICAL_W - layout.width - 4, textY);
         b.end();
     }
 
