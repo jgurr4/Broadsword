@@ -4,7 +4,7 @@ package com.jmgurr.broadsword;
 public final class GameConfig {
     public static final long SEED = 42L;
     public static final int TILE = 15;
-    public static final int SCALE = 3;
+    public static final int SCALE = 9;
     public static final int VIEW_W = 16 * TILE; // 240 logical px
     public static final int VIEW_H = 10 * TILE; // 150 logical px
     public static final float STEP_INTERVAL = 0.12f; // ~8 tiles/sec
