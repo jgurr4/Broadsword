@@ -21,7 +21,7 @@ H=(-H "Authorization: token $FORGEJO_TOKEN" -H "Content-Type: application/json")
 
 ## Conventions
 
-- **Create an issue**: `curl -s -X POST "${H[@]}" -d '{"title":"...","body":"..."}' "$API/issues"`
+- **Create an issue**: `curl -s -X POST "${H[@]}" -d '{"title":"...","body":"..."}' "$API/issues"`. Gotcha: the `labels` field in the create payload takes **numeric label ids** (`"labels":[22]`), not names — a name array is rejected and the POST silently returns an error body. Fetch ids from `GET "$API/labels"`; names work only on the `labels/<label-name>` add/remove endpoints.
 - **Read an issue**: `curl -s "${H[@]}" "$API/issues/<number>"` and `curl -s "${H[@]}" "$API/issues/<number>/comments"`
 - **List issues**: `curl -s "${H[@]}" "$API/issues?state=open"` (add `&labels=<name>` to filter)
 - **Comment**: `curl -s -X POST "${H[@]}" -d '{"body":"..."}' "$API/issues/<number>/comments"`

@@ -24,6 +24,22 @@ _Avoid_: cell, square
 A tile Link cannot enter: water, rock, tree, bush, etc.
 _Avoid_: wall (implies screen borders only), block
 
+**Tier**:
+A screen's enemy difficulty level (1–4), assigned from its distance from spawn. Only the enemy layer scales with tier; terrain does not.
+_Avoid_: level, depth, zone
+
+**Archetype**:
+A named screen shape drawn from a small fixed vocabulary — the readable grammar of the world. V1 roster: Meadow, Forest, Lake, River, Rockfield, Path, Clearing, Mountain, Shore. Each has a fixed, repeatable signature.
+_Avoid_: tileset, biome, template
+
+**Designed screen**:
+A hand-authored screen (or connected set of screens) placed at a random position in the generated world. Its enemies are author-placed; the secret pass skips it.
+_Avoid_: custom map, handcrafted room
+
+**Landmark**:
+A unique, one-per-world place at a fixed offset from the dungeon entrance (same relative position on every world). V1: Big Lake, Rock Mountain, Ruined Shrine, Cemetery.
+_Avoid_: POI, feature, decoration
+
 **Link**:
 The hero the human controls. Moves tile by tile; carries a sword and a shield; has three Hearts and a Magic meter.
 _Avoid_: player (player = the human), character, hero
@@ -60,6 +76,10 @@ _Avoid_: bullet, arrow
 The Projectile a Hydra head fires.
 _Avoid_: ball
 
+**Cemetery**:
+The one-per-world landmark of tombstones and crosses (2×2 screens, fixed offset from the dungeon entrance). Only home of the Ghost.
+_Avoid_: graveyard, graveyard (use Cemetery)
+
 **Enemy**:
 A hostile actor that occupies tiles in a screen and damages Link. V1 types: Grunt (melee) and Octorock (ranged).
 _Avoid_: monster, mob
@@ -87,6 +107,10 @@ _Avoid_: cave, fog
 **Flammable**:
 An attribute of some trees: the Light spell burns them down, removing the obstacle.
 
+**Ghost**:
+The ethereal enemy that exists only in the Cemetery. Phases through all obstacles and through Link; contact deals damage. Spawns at intervals while Link lingers on a Cemetery screen; despawns off-screen. Cannot be killed except by a key item (see Enemy AI).
+_Avoid_: spirit, wraith, spectre
+
 **Secret tree**:
 A Flammable tree that hides a secret; burning it down reveals Secret stairs or nothing (the tree itself was the key location blocking a passage).
 _Avoid_: hidden tree, chest tree
@@ -96,8 +120,8 @@ A hidden transport revealed by burning a Secret tree; in V1 they lead to the Old
 _Avoid_: door (a door is visible and permanent), portal
 
 **Cave**:
-A small room reached via Secret stairs, home to the Old woman. In V1 it does nothing.
-_Avoid_: hut, grotto
+A small room not part of the overworld grid. Two kinds: secret caves, reached by burning a Secret tree (V1: the Old woman's), and formation caves, entered through a hole in a large rock formation (Rockfield/Mountain). In V1 they hold nothing; later they hold unique merchants and items.
+_Avoid_: hut, grotto, dungeon (a dungeon is a full boss map)
 
 **Old woman**:
 The resident of the Cave. In V1 she does nothing; placeholder for a future NPC.
