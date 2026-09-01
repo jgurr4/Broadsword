@@ -57,7 +57,7 @@ An ability that consumes Magic. V1 has exactly one: Light.
 _Avoid_: attack, power
 
 **Light**:
-The spell. Sends a flame two tiles in front of Link; lights a Dark screen permanently, burns an enemy, or burns down a Flammable tree.
+The spell. Sends a flame two tiles in front of Link; lights a Dark screen (until the dungeon resets), burns an enemy, or burns down a Flammable tree.
 _Avoid_: fire, torch
 
 **Sword**:
@@ -100,8 +100,12 @@ _Avoid_: final enemy, king
 The dungeon boss: stationary, with three heads that fire Fireballs at Link.
 _Avoid_: dragon, serpent
 
+**Triforce piece**:
+The artifact awarded by defeating a dungeon's boss. V1: one piece (the Hydra's). Whether and how collecting pieces constitutes victory is decided by the Game end-states ticket.
+_Avoid_: artifact (generic), trophy
+
 **Dark screen**:
-A rare challenge room (dungeon only) rendered blank and black: no obstacles or textures, just vague outlines of the tiles, enemies, and Link. Lit permanently for the run by the Light spell.
+A rare challenge room (dungeon only) rendered blank and black: no obstacles or textures, just vague outlines of the tiles, enemies, and Link. Lit by the Light spell until the dungeon resets (goes dark again on re-entry).
 _Avoid_: cave, fog
 
 **Flammable**:
@@ -122,6 +126,22 @@ _Avoid_: door (a door is visible and permanent), portal
 **Cave**:
 A small room not part of the overworld grid. Two kinds: secret caves, reached by burning a Secret tree (V1: the Old woman's), and formation caves, entered through a hole in a large rock formation (Rockfield/Mountain). In V1 they hold nothing; later they hold unique merchants and items.
 _Avoid_: hut, grotto, dungeon (a dungeon is a full boss map)
+
+**Door**:
+A visible, authored passage between two screens. Every screen is walled on all four sides; a passage exists only where a door is authored. The overworld dungeon entrance is the only visible door in the overworld.
+_Avoid_: passage (generic), opening
+
+**Locked door**:
+A door that opens only when Link spends a Key on it. Authored in the dungeon map file.
+_Avoid_: gate, seal
+
+**Key**:
+A consumable picked up on contact that opens a Locked door. Any key opens any locked door (no pairing); held as a count. Consumed when used.
+_Avoid_: key item (generic), fob
+
+**Shoveable block**:
+A pushable obstacle: Link moves into its tile and the block moves one tile in the direction Link faces; it holds position until a dungeon reset. An authored trigger can make its first push reveal an item.
+_Avoid_: block (ambiguous), boulder (a boulder is Mountain-archetype terrain, not pushable)
 
 **Old woman**:
 The resident of the Cave. In V1 she does nothing; placeholder for a future NPC.
