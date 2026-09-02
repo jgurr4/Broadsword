@@ -105,7 +105,7 @@ The dungeon boss: stationary, with three heads that fire Fireballs at Link.
 _Avoid_: dragon, serpent
 
 **Triforce piece**:
-The artifact awarded by defeating a dungeon's boss. V1: one piece (the Hydra's). Whether and how collecting pieces constitutes victory is decided by the Game end-states ticket.
+The artifact awarded by defeating a dungeon's boss; collecting every piece wins the game. V1: one piece (the Hydra's); the finished game: up to 10, one per dungeon.
 _Avoid_: artifact (generic), trophy
 
 **Dark screen**:
@@ -156,4 +156,25 @@ The resident of the Cave. In V1 she does nothing; placeholder for a future NPC.
 _Avoid_: witch, sage
 
 **Game over**:
-The state following Link's death; a screen that ends the run.
+The screen following Link's death, before respawn. Death is not the end of a save: Link respawns at spawn, or at the dungeon entrance if death occurred inside a dungeon. Only non-persistent changes reset.
+_Avoid_: game end (victory is the other end-state), wipe
+
+**Persistent change**:
+A world change that survives death, reset, and reload: items obtained, Ruppees, bosses killed, dungeons beaten, secrets uncovered, Triforce pieces collected. Stored in the save file.
+_Avoid_: permanent item (a subset: key items), durable state
+
+**Non-persistent change**:
+A world change that reverts on death, reset, or reload: enemy spawns, uncollected pickups, in-progress dungeon state. The world re-derives from the seed plus persistent changes.
+_Avoid_: temporary state, run state
+
+**Save file**:
+A named world's persistence: its seed plus all persistent changes plus Link's position. Autosaved on every screen transition and on major events (item acquired, piece collected, dungeon entry). Loading resumes at the saved position; starting a new save always begins at spawn with a new seed.
+_Avoid_: checkpoint, slot (a slot is the UI around the file)
+
+**New Game+**:
+The post-victory mode that continues the same world in the won state, keeping persistent changes. Not in V1; difficulty selection is its post-V1 sibling for new challenge.
+_Avoid_: NG+ (in prose), restart
+
+**Ruppee**:
+The currency carried across death. Introduced post-V1; named here because persistent-change rules reference it.
+_Avoid_: rupee (spelling), coin, money
