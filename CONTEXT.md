@@ -152,7 +152,7 @@ A pushable obstacle: Link moves into its tile and the block moves one tile in th
 _Avoid_: block (ambiguous), boulder (a boulder is Mountain-archetype terrain, not pushable)
 
 **Old woman**:
-The resident of the Cave. In V1 she does nothing; placeholder for a future NPC.
+The resident of the secret Cave, reached via Secret stairs; one per world. She sells one coarse location hint per dungeon (a terrain/Tier pointer, never a pinned coordinate) for 100 Ruppees, once per dungeon. In V1 she does nothing; the Ruppee economy is required before she can.
 _Avoid_: witch, sage
 
 **Game over**:
@@ -176,5 +176,5 @@ The post-victory mode that continues the same world in the won state, keeping pe
 _Avoid_: NG+ (in prose), restart
 
 **Ruppee**:
-The currency carried across death. Introduced post-V1; named here because persistent-change rules reference it.
+The currency, carried across death (cap 999). Each kill drops at most one: 50% Green (worth 1), 25% Blue (worth 5), 25% nothing; picked up on contact, despawned after 10 seconds or on leaving the screen. Introduced post-V1.
 _Avoid_: rupee (spelling), coin, money
