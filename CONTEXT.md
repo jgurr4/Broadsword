@@ -65,11 +65,15 @@ Link's melee weapon; a swing hits the tile Link faces.
 _Avoid_: blade, weapon (ambiguous with spell)
 
 **Shield**:
-Link's basic defense; deflects Projectiles automatically while Link is not swinging.
+Link's basic defense. While he is **not** swinging the sword and is **facing** an incoming Projectile, the V1 shield **destroys it on impact** — it does not reflect or deflect. A Projectile still hits if he is swinging when it makes contact, or if it arrives from a side he is not facing.
 _Avoid_: block, guard
 
+**Magic Shield**:
+A post-V1 shield power-up that, unlike the V1 shield, **reflects** a blocked Projectile back toward the attacker (sent back in the opposite direction) instead of destroying it. Not part of V1.
+_Avoid_: reflective shield, mirror shield
+
 **Projectile**:
-A fast object fired by an enemy at Link; deflected by the shield.
+A fast object fired by an enemy at Link. The V1 shield destroys it on impact (if Link is not swinging and is facing it); the later Magic Shield reflects it.
 _Avoid_: bullet, arrow
 
 **Fireball**:
