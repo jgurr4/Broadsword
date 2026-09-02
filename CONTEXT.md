@@ -112,8 +112,12 @@ _Avoid_: cave, fog
 An attribute of some trees: the Light spell burns them down, removing the obstacle.
 
 **Ghost**:
-The ethereal enemy that exists only in the Cemetery. Phases through all obstacles and through Link; contact deals damage. Spawns at intervals while Link lingers on a Cemetery screen; despawns off-screen. Cannot be killed except by a key item (see Enemy AI).
+The ethereal enemy that exists only in the Cemetery. Phases through all obstacles and through Link; contact deals damage. Spawns at intervals while Link lingers on a Cemetery screen; despawns off-screen. Cannot be killed by sword, Light, or any attack; only the Flute dispels them.
 _Avoid_: spirit, wraith, spectre
+
+**Flute**:
+An item Link activates with a button press; it plays a short tune that dispels every Ghost on the current screen and stops Ghost spawning while Link stays on that screen. One use per screen visit — it resets when Link leaves the screen and re-enters. Consumes no Magic. Effectively Cemetery-only (Ghosts exist only there).
+_Avoid_: ocarina, panpipes, horn
 
 **Secret tree**:
 A Flammable tree that hides a secret; burning it down reveals Secret stairs or nothing (the tree itself was the key location blocking a passage).
