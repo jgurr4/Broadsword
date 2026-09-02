@@ -49,7 +49,7 @@ Create a Forgejo issue via the API.
 Used by `/wayfinder`. The **map** is a single issue with **child** issues as tickets.
 
 - **Map**: an issue labelled `wayfinder:map` holding the Notes / Decisions-so-far / Fog body.
-- **Child ticket**: an issue with `Part of #<map>` on the first line of its body. Labels: `wayfinder:<type>` (`research`/`prototype`/`grilling`/`task`). Once claimed, the ticket is assigned to the driving dev (PATCH the issue with `assignee_ids`).
+- **Child ticket**: an issue with `Part of #<map>` on the first line of its body. Labels: `wayfinder:<type>` (`research`/`prototype`/`grilling`/`task`). Once claimed, the ticket is assigned to the driving dev (`POST /issues/<n>/assignees` with `{"assignee":"<login>"}` — a PATCH with `assignee_ids` returns 200 but does not stick).
 - **Blocking**: a `Blocked by: #<n>, #<n>` line at the top of the child body (Forgejo has no native issue dependencies). A ticket is unblocked when every blocker is closed.
 - **Frontier query**: list the map's open children, drop any with an open `Blocked by` entry or an assignee; first in map order wins.
 - **Claim**: assign the child issue to the session's user, the session's first write.
