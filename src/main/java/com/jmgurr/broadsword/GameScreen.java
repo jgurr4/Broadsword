@@ -10,13 +10,13 @@ import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 
 import com.jmgurr.broadsword.model.Link;
+import com.jmgurr.broadsword.model.Sim;
 import com.jmgurr.broadsword.model.Tile;
 import com.jmgurr.broadsword.model.World;
 
 public class GameScreen implements Screen {
     private final BroadswordGame game;
-    private final World world;
-    private final Link link;
+    private final Sim sim;
     private final Texture tiles;
     private final Texture ui;
     private final Texture sprites;
@@ -24,16 +24,11 @@ public class GameScreen implements Screen {
 
     private final BitmapFont font = new BitmapFont();
     private final GlyphLayout layout = new GlyphLayout();
-    private float stepTimer = 0;
-    private boolean interpolating = false;
-    private float interpProgress = 1;
-    private Link.Dir interpolatingDir = null; // dir of the in-flight step
     private Link.Dir desired = null;
 
     public GameScreen(BroadswordGame game) {
         this.game = game;
-        this.world = new World(GameConfig.SEED);
-        this.link = new Link(World.SPAWN_SX, World.SPAWN_SY, World.SPAWN_TX, World.SPAWN_TY);
+        this.sim = new Sim(GameConfig.SEED);
         this.tiles = game.tiles();
         this.ui = game.ui();
         this.sprites = game.sprites();
@@ -48,33 +43,9 @@ public class GameScreen implements Screen {
 
     @Override
     public void render(float delta) {
-        update(Math.min(delta, 0.1f));
-        draw();
-    }
-
-    private void update(float delta) {
         desired = readInput();
-        if (desired != null && !interpolating && stepTimer >= GameConfig.STEP_INTERVAL) {
-            int psx = link.sx, psy = link.sy;
-            if (link.step(world, desired)) {
-                if (link.sx != psx || link.sy != psy) {
-                    // crossed a screen edge: no slide animation across the seam
-                    interpolating = false;
-                } else {
-                    interpolating = true;
-                    interpolatingDir = desired;
-                    interpProgress = 0;
-                }
-                stepTimer = 0;
-            }
-        }
-        stepTimer += delta;
-        if (interpolating) {
-            interpProgress = Math.min(1, interpProgress + delta / GameConfig.STEP_INTERVAL);
-            if (interpProgress >= 1) {
-                interpolating = false;
-            }
-        }
+        sim.tick(Math.min(delta, 0.1f), desired);
+        draw();
     }
 
     private Link.Dir readInput() {
@@ -94,15 +65,16 @@ public class GameScreen implements Screen {
     }
 
     private void draw() {
+        Link link = sim.link();
         SpriteBatch b = game.batch();
         b.setProjectionMatrix(game.viewport().getCamera().combined);
         b.begin();
         float linkPxX, linkPxY;
-        if (interpolating) {
+        if (sim.interpolating()) {
             // interpolation only happens within one screen: screen-local start + progress
-            Link.Dir d = interpolatingDir;
-            float fx = link.tx - d.dx + d.dx * interpProgress;
-            float fy = link.ty - d.dy + d.dy * interpProgress;
+            Link.Dir d = sim.interpolatingDir();
+            float fx = link.tx - d.dx + d.dx * sim.interpProgress();
+            float fy = link.ty - d.dy + d.dy * sim.interpProgress();
             linkPxX = fx * GameConfig.TILE;
             linkPxY = (World.SCREEN_H - 1 - fy) * GameConfig.TILE;
         } else {
@@ -111,7 +83,7 @@ public class GameScreen implements Screen {
         }
         for (int y = 0; y < World.SCREEN_H; y++) {
             for (int x = 0; x < World.SCREEN_W; x++) {
-                Tile t = world.screen(link.sx, link.sy).get(x, y);
+                Tile t = sim.world().screen(link.sx, link.sy).get(x, y);
                 int cell = switch (t) {
                     case GRASS -> 0;
                     case ROCK -> 1;

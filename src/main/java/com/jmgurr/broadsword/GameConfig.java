@@ -15,7 +15,6 @@ public final class GameConfig {
     public static final int WINDOW_H = 1350;
 
     // gameplay tuning
-    public static final float STEP_INTERVAL = 0.12f; // ~8 tiles/sec
     public static final int MAX_HEARTS = 3;
     public static final int MAX_MAGIC = 4;
 
