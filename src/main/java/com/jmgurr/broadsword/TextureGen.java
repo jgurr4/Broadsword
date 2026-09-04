@@ -14,8 +14,9 @@ public final class TextureGen {
     private TextureGen() {
     }
 
+    /** Tile strip, one cell per Tile ordinal: GRASS DIRT SAND ROCK TREE TOMBSTONE WATER ENTRANCE. */
     public static Texture tiles() {
-        int w = 6 * GameConfig.TILE;
+        int w = 8 * GameConfig.TILE;
         Pixmap pm = new Pixmap(w, GameConfig.TILE, Pixmap.Format.RGBA8888);
         pm.setColor(Color.BLACK);
         pm.fill();
@@ -27,10 +28,12 @@ public final class TextureGen {
                 int n = (x * 7 + y * 13) % 5;
                 switch (cell) {
                     case 0 -> pm.setColor(n % 2 == 0 ? new Color(0.29f, 0.6f, 0.24f, 1) : new Color(0.25f, 0.55f, 0.22f, 1));
-                    case 1 -> pm.setColor(lx < 2 || ly < 2 || lx >= 13 || ly >= 13 ? new Color(0.3f, 0.3f, 0.32f, 1) : new Color(0.55f, 0.55f, 0.58f, 1));
-                    case 2 -> pm.setColor(ly >= 11 ? new Color(0.4f, 0.28f, 0.15f, 1) : n % 3 == 0 ? new Color(0.1f, 0.4f, 0.15f, 1) : new Color(0.15f, 0.45f, 0.2f, 1));
-                    case 3 -> pm.setColor(n == 0 ? new Color(0.25f, 0.45f, 0.8f, 1) : new Color(0.2f, 0.4f, 0.75f, 1));
-                    case 4 -> pm.setColor(n % 2 == 0 ? new Color(0.2f, 0.18f, 0.22f, 1) : new Color(0.18f, 0.16f, 0.2f, 1));
+                    case 1 -> pm.setColor(n % 2 == 0 ? new Color(0.55f, 0.42f, 0.26f, 1) : new Color(0.5f, 0.38f, 0.23f, 1));
+                    case 2 -> pm.setColor(n % 2 == 0 ? new Color(0.85f, 0.78f, 0.55f, 1) : new Color(0.8f, 0.73f, 0.5f, 1));
+                    case 3 -> pm.setColor(lx < 2 || ly < 2 || lx >= 13 || ly >= 13 ? new Color(0.3f, 0.3f, 0.32f, 1) : new Color(0.55f, 0.55f, 0.58f, 1));
+                    case 4 -> pm.setColor(ly >= 11 ? new Color(0.4f, 0.28f, 0.15f, 1) : n % 3 == 0 ? new Color(0.1f, 0.4f, 0.15f, 1) : new Color(0.15f, 0.45f, 0.2f, 1));
+                    case 5 -> pm.setColor(ly >= 3 && lx >= 4 && lx <= 10 && (ly >= 5 || Math.abs(lx - 7) + ly <= 7) ? new Color(0.6f, 0.6f, 0.65f, 1) : new Color(0.25f, 0.5f, 0.2f, 1));
+                    case 6 -> pm.setColor(n == 0 ? new Color(0.25f, 0.45f, 0.8f, 1) : new Color(0.2f, 0.4f, 0.75f, 1));
                     default -> pm.setColor((ly >= 3 && lx >= 4 && lx <= 10) ? new Color(0.5f, 0.3f, 0.15f, 1) : new Color(0.12f, 0.1f, 0.14f, 1));
                 }
                 pm.drawPixel(x, y);

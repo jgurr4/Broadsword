@@ -32,12 +32,16 @@ public class GameScreen implements Screen {
         this.tiles = game.tiles();
         this.ui = game.ui();
         this.sprites = game.sprites();
-        // tile strip cells: 0 GRASS, 1 ROCK, 2 TREE, 3 WATER
+        // tile strip cells match the Tile enum ordinals
         this.tileRegions = new TextureRegion[] {
             TextureGen.region(tiles, 0),
             TextureGen.region(tiles, 1),
             TextureGen.region(tiles, 2),
-            TextureGen.region(tiles, 3)
+            TextureGen.region(tiles, 3),
+            TextureGen.region(tiles, 4),
+            TextureGen.region(tiles, 5),
+            TextureGen.region(tiles, 6),
+            TextureGen.region(tiles, 7)
         };
     }
 
@@ -84,12 +88,7 @@ public class GameScreen implements Screen {
         for (int y = 0; y < World.SCREEN_H; y++) {
             for (int x = 0; x < World.SCREEN_W; x++) {
                 Tile t = sim.world().screen(link.sx, link.sy).get(x, y);
-                int cell = switch (t) {
-                    case GRASS -> 0;
-                    case ROCK -> 1;
-                    case TREE -> 2;
-                    case WATER -> 3;
-                };
+                int cell = t.ordinal();
                 b.draw(tileRegions[cell], x * GameConfig.TILE, (World.SCREEN_H - 1 - y) * GameConfig.TILE);
             }
         }
@@ -101,8 +100,13 @@ public class GameScreen implements Screen {
         for (int i = 0; i < GameConfig.MAX_MAGIC; i++) {
             b.draw(TextureGen.region(ui, 1), 3 + i * 12, GameConfig.LOGICAL_H - 38);
         }
-        // dev readout: screen:tiles and the direction the input layer sees
-        String dbg = String.format("%d:%d %d:%d %s", link.sx, link.sy, link.tx, link.ty,
+        // dev readout: what the screen is (a landmark overrides its archetype),
+        // screen:tiles and the direction the input layer sees
+        World world = sim.world();
+        com.jmgurr.broadsword.model.Landmark lm = world.landmarkAt(link.sx, link.sy);
+        String dbg = String.format("%s %d:%d %d:%d %s",
+                lm != null ? lm.name() : world.archetype(link.sx, link.sy).name(),
+                link.sx, link.sy, link.tx, link.ty,
                 desired == null ? "-" : desired.name());
         layout.setText(font, dbg);
         // y-up camera: y is the text baseline; place by ascent so the glyph tops

@@ -5,7 +5,7 @@ A 2D Zelda-inspired adventure game. Every map is auto-generated; players who can
 ## Language
 
 **Overworld**:
-The main playable area: a 40×10 grid of screens (400 screens).
+The main playable area: a 40×15 grid of screens (600 screens).
 _Avoid_: world, map (ambiguous with dungeon map)
 
 **Dungeon**:
