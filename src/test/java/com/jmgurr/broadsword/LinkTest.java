@@ -3,12 +3,13 @@ package com.jmgurr.broadsword;
 import com.jmgurr.broadsword.model.Link;
 import com.jmgurr.broadsword.model.Tile;
 import com.jmgurr.broadsword.model.World;
+import com.jmgurr.broadsword.model.WorldGenerator;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 class LinkTest {
-    private final World w = new World(1L);
+    private final World w = WorldGenerator.generate(1L);
 
     private static Link.Dir opposite(Link.Dir d) {
         return switch (d) {
@@ -78,7 +79,7 @@ class LinkTest {
 
     @Test
     void worldBorderBlocks() {
-        World border = new World(2L);
+        World border = WorldGenerator.generate(2L);
         // y-down: sy=0 is the north screen row, sy=WORLD_H-1 is the south screen row
         border.screen(0, 0).set(0, 0, Tile.GRASS);
         Link l = new Link(0, 0, 0, 0);
@@ -97,8 +98,8 @@ class LinkTest {
 
     @Test
     void seedReproducesWorld() {
-        World a = new World(7L);
-        World b = new World(7L);
+        World a = WorldGenerator.generate(7L);
+        World b = WorldGenerator.generate(7L);
         for (int y = 0; y < World.WORLD_H; y++) {
             for (int x = 0; x < World.WORLD_W; x++) {
                 for (int ty = 0; ty < World.SCREEN_H; ty++) {

@@ -32,12 +32,16 @@ public class GameScreen implements Screen {
         this.tiles = game.tiles();
         this.ui = game.ui();
         this.sprites = game.sprites();
-        // tile strip cells: 0 GRASS, 1 ROCK, 2 TREE, 3 WATER
+        // tile strip cells match the Tile enum ordinals
         this.tileRegions = new TextureRegion[] {
             TextureGen.region(tiles, 0),
             TextureGen.region(tiles, 1),
             TextureGen.region(tiles, 2),
-            TextureGen.region(tiles, 3)
+            TextureGen.region(tiles, 3),
+            TextureGen.region(tiles, 4),
+            TextureGen.region(tiles, 5),
+            TextureGen.region(tiles, 6),
+            TextureGen.region(tiles, 7)
         };
     }
 
@@ -84,12 +88,7 @@ public class GameScreen implements Screen {
         for (int y = 0; y < World.SCREEN_H; y++) {
             for (int x = 0; x < World.SCREEN_W; x++) {
                 Tile t = sim.world().screen(link.sx, link.sy).get(x, y);
-                int cell = switch (t) {
-                    case GRASS -> 0;
-                    case ROCK -> 1;
-                    case TREE -> 2;
-                    case WATER -> 3;
-                };
+                int cell = t.ordinal();
                 b.draw(tileRegions[cell], x * GameConfig.TILE, (World.SCREEN_H - 1 - y) * GameConfig.TILE);
             }
         }

@@ -17,7 +17,7 @@ public final class Sim {
     private Link.Dir interpolatingDir = null; // dir of the in-flight step
 
     public Sim(long seed) {
-        this.world = new World(seed);
+        this.world = WorldGenerator.generate(seed);
         this.link = new Link(World.SPAWN_SX, World.SPAWN_SY, World.SPAWN_TX, World.SPAWN_TY);
     }
 
