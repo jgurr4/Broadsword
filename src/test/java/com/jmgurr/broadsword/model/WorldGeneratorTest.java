@@ -47,7 +47,7 @@ class WorldGeneratorTest {
         for (long seed : SAMPLE) {
             World w = WorldGenerator.generate(seed);
             assertEquals(0, w.generationAttempts(), "seed " + seed + " should be valid on the first try");
-            assertTrue(WorldGenerator.archetypeConstraintHolds(w), "seed " + seed);
+            assertTrue(WorldGenerator.regionArchetypesAreSized(w), "seed " + seed);
             assertTrue(WorldGenerator.entranceIsPlaced(w), "seed " + seed);
             assertTrue(WorldGenerator.spawnIsWalkable(w), "seed " + seed);
             assertTrue(WorldGenerator.allScreensReachable(w), "seed " + seed);
@@ -281,18 +281,42 @@ class WorldGeneratorTest {
         }
     }
 
-    /** No archetype fills all four neighbours of any screen. */
+    /** Region archetypes come in sized blobs: 6-18 connected screens each. */
     @Test
-    void noScreenHasOneArchetypeOnAllSides() {
+    void regionArchetypesAreSizedBlobs() {
+        Archetype[] regions = { Archetype.FOREST, Archetype.ROCKFIELD, Archetype.MOUNTAIN, Archetype.LAKE,
+                Archetype.PATH, Archetype.CLEARING };
         for (long seed : SAMPLE) {
             World w = WorldGenerator.generate(seed);
-            for (int sy = 1; sy + 1 < World.WORLD_H; sy++) {
-                for (int sx = 1; sx + 1 < World.WORLD_W; sx++) {
-                    Archetype a = w.archetype(sx, sy);
-                    boolean ringed = a == w.archetype(sx - 1, sy) && a == w.archetype(sx + 1, sy)
-                            && a == w.archetype(sx, sy - 1) && a == w.archetype(sx, sy + 1);
-                    assertFalse(ringed, "seed " + seed + " at " + sx + "," + sy + " ringed by " + a);
+            for (Archetype arch : regions) {
+                int total = 0;
+                boolean[][] seen = new boolean[World.WORLD_W][World.WORLD_H];
+                for (int sy = 0; sy < World.WORLD_H; sy++) {
+                    for (int sx = 0; sx < World.WORLD_W; sx++) {
+                        if (seen[sx][sy] || w.archetype(sx, sy) != arch) {
+                            continue;
+                        }
+                        int size = 0;
+                        java.util.Deque<int[]> q = new java.util.ArrayDeque<>();
+                        seen[sx][sy] = true;
+                        q.add(new int[] { sx, sy });
+                        while (!q.isEmpty()) {
+                            int[] c = q.poll();
+                            size++;
+                            for (int[] d : new int[][] { { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 } }) {
+                                int nx = c[0] + d[0], ny = c[1] + d[1];
+                                if (World.inWorld(nx, ny) && !seen[nx][ny] && w.archetype(nx, ny) == arch) {
+                                    seen[nx][ny] = true;
+                                    q.add(new int[] { nx, ny });
+                                }
+                            }
+                        }
+                        assertTrue(size >= 6 && size <= 18,
+                                "seed " + seed + " " + arch + " run of " + size + " at " + sx + "," + sy);
+                        total += size;
+                    }
                 }
+                assertTrue(total >= 6, "seed " + seed + " " + arch + " barely present");
             }
         }
     }

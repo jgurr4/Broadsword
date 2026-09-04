@@ -100,9 +100,13 @@ public class GameScreen implements Screen {
         for (int i = 0; i < GameConfig.MAX_MAGIC; i++) {
             b.draw(TextureGen.region(ui, 1), 3 + i * 12, GameConfig.LOGICAL_H - 38);
         }
-        // dev readout: archetype, screen:tiles and the direction the input layer sees
+        // dev readout: what the screen is (a landmark overrides its archetype),
+        // screen:tiles and the direction the input layer sees
+        World world = sim.world();
+        com.jmgurr.broadsword.model.Landmark lm = world.landmarkAt(link.sx, link.sy);
         String dbg = String.format("%s %d:%d %d:%d %s",
-                sim.world().archetype(link.sx, link.sy), link.sx, link.sy, link.tx, link.ty,
+                lm != null ? lm.name() : world.archetype(link.sx, link.sy).name(),
+                link.sx, link.sy, link.tx, link.ty,
                 desired == null ? "-" : desired.name());
         layout.setText(font, dbg);
         // y-up camera: y is the text baseline; place by ascent so the glyph tops

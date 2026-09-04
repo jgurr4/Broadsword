@@ -6,10 +6,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 
-/** The overworld: a 40x10 grid of screens (400 screens), fully derived from one seed. */
+/** The overworld: a 40x15 grid of screens (600 screens), fully derived from one seed. */
 public class World {
     public static final int WORLD_W = 40;
-    public static final int WORLD_H = 10;
+    public static final int WORLD_H = 15;
     public static final int SCREEN_W = 16;
     public static final int SCREEN_H = 10;
 

@@ -4,18 +4,17 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
 import java.util.EnumMap;
-import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
-import java.util.Set;
 import java.util.function.Predicate;
 
 /**
- * Generates the overworld as a pure function of a seed: the archetype map,
- * tier bands by distance from spawn, rivers and shorelines that continue
- * across screen borders, the four fixed-offset landmarks, one dungeon
- * entrance, and tier-scaled enemy placements.
+ * Generates the overworld as a pure function of a seed: the archetype map
+ * (region archetypes placed as sized blobs, the rest as filler), tier bands by
+ * distance from spawn, rivers and shorelines that continue across screen
+ * borders, the four fixed-offset landmarks, one dungeon entrance, and
+ * tier-scaled enemy placements.
  *
  * <p>Connectivity is constructed rather than hoped for. Every screen keeps a
  * walkable plus-shaped lane (row {@link World#LANE_Y}, column
@@ -32,15 +31,20 @@ public final class WorldGenerator {
 
     // --- tunables -------------------------------------------------------------
 
-    /** Archetype draw weights for interior screens (spec ticket #4). */
-    private static final Map<Archetype, Integer> WEIGHT = Map.of(
-            Archetype.MEADOW, 22,
-            Archetype.FOREST, 22,
-            Archetype.LAKE, 10,
-            Archetype.ROCKFIELD, 12,
-            Archetype.PATH, 10,
-            Archetype.CLEARING, 8,
-            Archetype.MOUNTAIN, 6);
+    /**
+     * Archetypes placed as regions: each occurrence is one blob of
+     * REGION_MIN..REGION_MAX screens, and two regions of the same archetype
+     * never share an edge. Meadow is the connective filler.
+     */
+    private static final List<Archetype> REGION_ARCHETYPES = List.of(
+            Archetype.FOREST, Archetype.ROCKFIELD, Archetype.MOUNTAIN, Archetype.LAKE, Archetype.PATH,
+            Archetype.CLEARING);
+    /** Screens per region. */
+    private static final int REGION_MIN = 6, REGION_MAX = 18;
+    /** Regions per archetype per world. */
+    private static final int REGIONS_PER_ARCHETYPE_MIN = 2, REGIONS_PER_ARCHETYPE_MAX = 4;
+    /** Chance a region is laid as a full rectangle instead of a grown blob. */
+    private static final double REGION_BLOCK_CHANCE = 0.5;
     /** Chance an interior screen column carries the river; dry gap between rivers. */
     private static final double RIVER_COL_CHANCE = 0.06;
     private static final int RIVER_GAP = 3;
@@ -164,8 +168,10 @@ public final class WorldGenerator {
 
     /**
      * The archetype map. The border ring is Shore (the world is an island, so
-     * the coastline wraps every corner for free), river columns are River,
-     * everything else is a weighted draw.
+     * the coastline wraps every corner for free) and river columns are River.
+     * Region archetypes are then stamped as 6-18 screen blobs; because a region
+     * never grows next to an existing cell of its own archetype, two regions of
+     * the same archetype can never touch. Whatever is left is filler: Meadow.
      */
     private static Archetype[][] drawArchetypes(Random rng, int[] riverStrip) {
         Archetype[][] a = new Archetype[World.WORLD_W][World.WORLD_H];
@@ -175,91 +181,140 @@ public final class WorldGenerator {
                     a[sx][sy] = Archetype.SHORE;
                 } else if (riverStrip[sx] > 0) {
                     a[sx][sy] = Archetype.RIVER;
-                } else {
-                    a[sx][sy] = draw(rng, Set.of());
                 }
             }
         }
-        repairNeighbourConstraint(a, rng);
+        List<Archetype> order = new ArrayList<>(REGION_ARCHETYPES);
+        java.util.Collections.shuffle(order, rng);
+        for (Archetype arch : order) {
+            int regions = range(rng, REGIONS_PER_ARCHETYPE_MIN, REGIONS_PER_ARCHETYPE_MAX);
+            for (int i = 0; i < regions; i++) {
+                placeRegion(a, rng, arch, riverStrip);
+            }
+        }
+        for (int sy = 0; sy < World.WORLD_H; sy++) {
+            for (int sx = 0; sx < World.WORLD_W; sx++) {
+                if (a[sx][sy] == null) {
+                    a[sx][sy] = Archetype.MEADOW;
+                }
+            }
+        }
         return a;
     }
 
-    /** Weighted archetype draw; Shore and River are structural, never drawn. */
-    private static Archetype draw(Random rng, Set<Archetype> extraExcluded) {
-        Set<Archetype> excluded = EnumSet.of(Archetype.SHORE, Archetype.RIVER);
-        excluded.addAll(extraExcluded);
-        int total = 0;
-        for (Map.Entry<Archetype, Integer> e : WEIGHT.entrySet()) {
-            if (!excluded.contains(e.getKey())) {
-                total += e.getValue();
+    /**
+     * True if (sx,sy) can hold a cell of this region. `own` lists cells of the
+     * region being grown (may be null): touching them is fine, touching any
+     * other cell of the same archetype is not.
+     */
+    private static boolean regionCellFree(Archetype[][] a, int sx, int sy, int[] riverStrip, Archetype arch,
+            List<Integer> own) {
+        if (sx <= 0 || sy <= 0 || sx >= World.WORLD_W - 1 || sy >= World.WORLD_H - 1) {
+            return false; // no border ring, regions stay inside the island
+        }
+        if (riverStrip[sx] > 0 || a[sx][sy] != null) {
+            return false;
+        }
+        for (int d = 0; d < 4; d++) { // never touch another region of the same archetype
+            int nx = sx + DDX[d], ny = sy + DDY[d];
+            if (a[nx][ny] == arch && (own == null || !own.contains(id(nx, ny)))) {
+                return false;
             }
         }
-        int roll = rng.nextInt(total);
-        for (Archetype a : Archetype.values()) {
-            Integer w = WEIGHT.get(a);
-            if (w == null || excluded.contains(a)) {
-                continue;
-            }
-            if (roll < w) {
-                return a;
-            }
-            roll -= w;
-        }
-        throw new AssertionError("archetype pool exhausted");
+        return true;
     }
 
     /**
-     * No screen may share its archetype with all four neighbours. River screens
-     * can never violate it (RIVER_GAP keeps their east/west neighbours dry) and
-     * Shore is border-only (so it never has four neighbours at all).
+     * Stamp one region: usually a full rectangle, otherwise a blob grown from a
+     * random seed along a shuffled frontier. Gives up on the region if no spot
+     * fits; filler covers what is skipped.
      */
-    private static void repairNeighbourConstraint(Archetype[][] a, Random rng) {
-        Set<Archetype> structural = EnumSet.of(Archetype.RIVER, Archetype.SHORE);
-        for (int pass = 0; pass < 20; pass++) {
-            boolean dirty = false;
-            for (int sy = 0; sy < World.WORLD_H; sy++) {
-                for (int sx = 0; sx < World.WORLD_W; sx++) {
-                    if (degree(sx, sy) < 4 || structural.contains(a[sx][sy])) {
-                        continue;
-                    }
-                    if (sameAsAllNeighbours(a, sx, sy)) {
-                        a[sx][sy] = draw(rng, structural);
-                        dirty = true;
-                    }
-                }
+    private static void placeRegion(Archetype[][] a, Random rng, Archetype arch, int[] riverStrip) {
+        int target = range(rng, REGION_MIN, REGION_MAX);
+        for (int tryNo = 0; tryNo < 60; tryNo++) {
+            if (rng.nextDouble() < REGION_BLOCK_CHANCE
+                    && tryRectangle(a, rng, arch, riverStrip, target)) {
+                return;
             }
-            if (!dirty) {
+            if (tryBlob(a, rng, arch, riverStrip, target)) {
                 return;
             }
         }
     }
 
-    private static boolean sameAsAllNeighbours(Archetype[][] a, int sx, int sy) {
-        for (int d = 0; d < 4; d++) {
-            if (a[sx + DDX[d]][sy + DDY[d]] != a[sx][sy]) {
-                return false;
+    /** A full rectangle of the right size band, if one fits at a random spot. */
+    private static boolean tryRectangle(Archetype[][] a, Random rng, Archetype arch, int[] riverStrip, int size) {
+        int h = 1 + rng.nextInt(4); // region height in screens
+        int w = Math.max(2, Math.round(size / (float) h));
+        while (w * h > REGION_MAX && w > 1) {
+            w--;
+        }
+        if (w * h < REGION_MIN || w + 1 >= World.WORLD_W || h + 1 >= World.WORLD_H) {
+            return false;
+        }
+        int x0 = 1 + rng.nextInt(World.WORLD_W - w - 1);
+        int y0 = 1 + rng.nextInt(World.WORLD_H - h - 1);
+        for (int y = y0; y < y0 + h; y++) {
+            for (int x = x0; x < x0 + w; x++) {
+                if (!regionCellFree(a, x, y, riverStrip, arch, null)) {
+                    return false;
+                }
+            }
+        }
+        for (int y = y0; y < y0 + h; y++) {
+            for (int x = x0; x < x0 + w; x++) {
+                a[x][y] = arch;
             }
         }
         return true;
     }
 
-    private static boolean sameAsAllNeighbours(World w, int sx, int sy) {
-        for (int d = 0; d < 4; d++) {
-            if (w.archetype(sx + DDX[d], sy + DDY[d]) != w.archetype(sx, sy)) {
-                return false;
+    /**
+     * Grow a blob from a seed cell along a random frontier. Cells are claimed the
+     * moment they are taken, so a region never touches an older one of its own
+     * archetype; a blob that starves before REGION_MIN rolls itself back.
+     */
+    private static boolean tryBlob(Archetype[][] a, Random rng, Archetype arch, int[] riverStrip, int size) {
+        int sx = 1 + rng.nextInt(World.WORLD_W - 2), sy = 1 + rng.nextInt(World.WORLD_H - 2);
+        if (!regionCellFree(a, sx, sy, riverStrip, arch, null)) {
+            return false;
+        }
+        List<Integer> taken = new ArrayList<>();
+        List<Integer> frontier = new ArrayList<>();
+        taken.add(id(sx, sy));
+        a[sx][sy] = arch;
+        addFrontier(a, frontier, sx, sy, riverStrip, arch, taken);
+        while (taken.size() < size && !frontier.isEmpty()) {
+            int next = frontier.remove(rng.nextInt(frontier.size()));
+            int x = next % World.WORLD_W, y = next / World.WORLD_W;
+            if (!regionCellFree(a, x, y, riverStrip, arch, taken)) {
+                continue;
             }
+            taken.add(next);
+            a[x][y] = arch;
+            addFrontier(a, frontier, x, y, riverStrip, arch, taken);
+        }
+        if (taken.size() < REGION_MIN) {
+            for (int c : taken) {
+                a[c % World.WORLD_W][c / World.WORLD_W] = null;
+            }
+            return false;
         }
         return true;
     }
 
-    private static int degree(int sx, int sy) {
-        int n = 0;
+    private static void addFrontier(Archetype[][] a, List<Integer> frontier, int sx, int sy, int[] riverStrip,
+            Archetype arch, List<Integer> own) {
         for (int d = 0; d < 4; d++) {
-            if (World.inWorld(sx + DDX[d], sy + DDY[d])) {
-                n++;
+            int nx = sx + DDX[d], ny = sy + DDY[d];
+            if (regionCellFree(a, nx, ny, riverStrip, arch, own)) {
+                frontier.add(id(nx, ny));
             }
         }
-        return n;
+    }
+
+    private static int id(int sx, int sy) {
+        return sy * World.WORLD_W + sx;
     }
 
     private static boolean isBorder(int sx, int sy) {
@@ -703,15 +758,42 @@ public final class WorldGenerator {
 
     /** Post-conditions every generated world must satisfy. */
     static boolean valid(World w) {
-        return archetypeConstraintHolds(w) && screenBordersMatch(w) && entranceIsPlaced(w) && spawnIsWalkable(w)
+        return regionArchetypesAreSized(w) && screenBordersMatch(w) && entranceIsPlaced(w) && spawnIsWalkable(w)
                 && allScreensReachable(w) && enemiesAreLegal(w);
     }
 
-    static boolean archetypeConstraintHolds(World w) {
-        for (int sy = 0; sy < World.WORLD_H; sy++) {
-            for (int sx = 0; sx < World.WORLD_W; sx++) {
-                if (degree(sx, sy) == 4 && sameAsAllNeighbours(w, sx, sy)) {
-                    return false;
+    /**
+     * Every connected run of a region archetype (Forest, Rockfield, Mountain,
+     * Lake, Path) holds REGION_MIN..REGION_MAX screens. Runs of the same
+     * archetype touching would merge into one oversized run, so this also
+     * enforces that no two regions of an archetype are adjacent.
+     */
+    static boolean regionArchetypesAreSized(World w) {
+        boolean[][] seen = new boolean[World.WORLD_W][World.WORLD_H];
+        for (Archetype arch : REGION_ARCHETYPES) {
+            for (int sy = 0; sy < World.WORLD_H; sy++) {
+                for (int sx = 0; sx < World.WORLD_W; sx++) {
+                    if (seen[sx][sy] || w.archetype(sx, sy) != arch) {
+                        continue;
+                    }
+                    int size = 0;
+                    Deque<Integer> queue = new ArrayDeque<>();
+                    seen[sx][sy] = true;
+                    queue.add(id(sx, sy));
+                    while (!queue.isEmpty()) {
+                        int c = queue.poll();
+                        size++;
+                        for (int d = 0; d < 4; d++) {
+                            int nx = c % World.WORLD_W + DDX[d], ny = c / World.WORLD_W + DDY[d];
+                            if (World.inWorld(nx, ny) && !seen[nx][ny] && w.archetype(nx, ny) == arch) {
+                                seen[nx][ny] = true;
+                                queue.add(id(nx, ny));
+                            }
+                        }
+                    }
+                    if (size < REGION_MIN || size > REGION_MAX) {
+                        return false;
+                    }
                 }
             }
         }
