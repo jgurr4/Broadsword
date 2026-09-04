@@ -112,20 +112,61 @@ class WorldGeneratorTest {
         }
     }
 
-    /** Every screen keeps its walkable lane cross, so the grid links by construction. */
+    /**
+     * Every interior screen keeps its lane cross. Shore screens do not: the ocean
+     * floods the lane there, which is the point (no bridge to nowhere), and the
+     * world edge needs no crossing.
+     */
     @Test
     void everyScreenKeepsItsLanes() {
         for (long seed : SAMPLE) {
             World w = WorldGenerator.generate(seed);
-            for (int sy = 0; sy < World.WORLD_H; sy++) {
-                for (int sx = 0; sx < World.WORLD_W; sx++) {
+            for (int sy = 1; sy + 1 < World.WORLD_H; sy++) {
+                for (int sx = 1; sx + 1 < World.WORLD_W; sx++) {
                     Screen s = w.screen(sx, sy);
-                    for (int x = 0; x < World.SCREEN_W; x++) {
-                        assertTrue(s.get(x, World.LANE_Y).walkable, "seed " + +seed + " lane row " + sx + "," + sy);
+                    for (int x = 1; x + 1 < World.SCREEN_W; x++) {
+                        assertTrue(s.get(x, World.LANE_Y).walkable, "seed " + seed + " lane row " + sx + "," + sy);
                     }
-                    for (int y = 0; y < World.SCREEN_H; y++) {
+                    for (int y = 1; y + 1 < World.SCREEN_H; y++) {
                         assertTrue(s.get(World.LANE_X, y).walkable, "seed " + seed + " lane col " + sx + "," + sy);
                     }
+                }
+            }
+        }
+    }
+
+    /** A border tile is walkable on both sides or neither: no invisible walls. */
+    @Test
+    void screenBordersMatchAcrossEveryEdge() {
+        for (long seed : SAMPLE) {
+            World w = WorldGenerator.generate(seed);
+            assertTrue(WorldGenerator.screenBordersMatch(w), "seed " + seed);
+        }
+    }
+
+    /** The shore has no bridge to nowhere: the sea reaches the world edge with no lane gap. */
+    @Test
+    void shoresHaveNoBridgeAcrossTheSea() {
+        for (long seed : SAMPLE) {
+            World w = WorldGenerator.generate(seed);
+            for (int sx = 0; sx < World.WORLD_W; sx++) {
+                if (w.landmarkAt(sx, 0) != null || w.landmarkAt(sx, World.WORLD_H - 1) != null) {
+                    continue; // landmarks own their tiles
+                }
+                for (int x = 0; x < World.SCREEN_W; x++) {
+                    assertEquals(Tile.WATER, w.screen(sx, 0).get(x, 0), "seed " + seed + " north edge");
+                    assertEquals(Tile.WATER, w.screen(sx, World.WORLD_H - 1).get(x, World.SCREEN_H - 1),
+                            "seed " + seed + " south edge");
+                }
+            }
+            for (int sy = 0; sy < World.WORLD_H; sy++) {
+                if (w.landmarkAt(0, sy) != null || w.landmarkAt(World.WORLD_W - 1, sy) != null) {
+                    continue;
+                }
+                for (int y = 0; y < World.SCREEN_H; y++) {
+                    assertEquals(Tile.WATER, w.screen(0, sy).get(0, y), "seed " + seed + " west edge");
+                    assertEquals(Tile.WATER, w.screen(World.WORLD_W - 1, sy).get(World.SCREEN_W - 1, y),
+                            "seed " + seed + " east edge");
                 }
             }
         }

@@ -100,8 +100,9 @@ public class GameScreen implements Screen {
         for (int i = 0; i < GameConfig.MAX_MAGIC; i++) {
             b.draw(TextureGen.region(ui, 1), 3 + i * 12, GameConfig.LOGICAL_H - 38);
         }
-        // dev readout: screen:tiles and the direction the input layer sees
-        String dbg = String.format("%d:%d %d:%d %s", link.sx, link.sy, link.tx, link.ty,
+        // dev readout: archetype, screen:tiles and the direction the input layer sees
+        String dbg = String.format("%s %d:%d %d:%d %s",
+                sim.world().archetype(link.sx, link.sy), link.sx, link.sy, link.tx, link.ty,
                 desired == null ? "-" : desired.name());
         layout.setText(font, dbg);
         // y-up camera: y is the text baseline; place by ascent so the glyph tops

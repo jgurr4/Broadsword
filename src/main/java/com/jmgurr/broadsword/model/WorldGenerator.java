@@ -127,6 +127,7 @@ public final class WorldGenerator {
                 screens[sx][sy] = render(rng, sx, sy, archetypes[sx][sy], riverStrip[sx], oceanDepth, landmarks);
             }
         }
+        repairBoundaries(screens);
         if (entrance != null) {
             screens[entrance.sx()][entrance.sy()].set(entrance.tx(), entrance.ty(), Tile.ENTRANCE);
         }
@@ -478,12 +479,63 @@ public final class WorldGenerator {
         scatter(s, rng, Tile.TREE, rng.nextInt(SHORE_TREES_MAX + 1), Tile.SAND);
     }
 
+    /** Ocean writes bypass lane protection: a sea strip must not keep a sand bridge to the horizon. */
     private static void sea(Screen s, int x, int y, int w, int h) {
         for (int j = 0; j < h; j++) {
             for (int i = 0; i < w; i++) {
-                put(s, x + i, y + j, Tile.WATER);
+                int tx = x + i, ty = y + j;
+                if (tx >= 0 && tx < World.SCREEN_W && ty >= 0 && ty < World.SCREEN_H) {
+                    s.set(tx, ty, Tile.WATER);
+                }
             }
         }
+    }
+
+    /**
+     * Make every screen border visible from both sides: a tile walkable on only one
+     * side of a border is closed with rock on its side, so the player never walks
+     * toward an edge that an unseen neighbouring screen blocks. Borders keep at
+     * least one opening because every screen keeps its lane cross walkable and the
+     * lane tiles of two neighbours always agree.
+     */
+    private static void repairBoundaries(Screen[][] screens) {
+        // corner tiles belong to two borders, so one pass can break what another
+        // just fixed; repairs only ever close tiles, so this converges fast
+        for (int pass = 0; pass < 10; pass++) {
+            boolean dirty = false;
+            for (int sy = 0; sy < World.WORLD_H; sy++) {
+                for (int sx = 0; sx + 1 < World.WORLD_W; sx++) {
+                    dirty |= repairBorder(screens[sx][sy], screens[sx + 1][sy], true);
+                }
+            }
+            for (int sy = 0; sy + 1 < World.WORLD_H; sy++) {
+                for (int sx = 0; sx < World.WORLD_W; sx++) {
+                    dirty |= repairBorder(screens[sx][sy], screens[sx][sy + 1], false);
+                }
+            }
+            if (!dirty) {
+                return;
+            }
+        }
+        throw new IllegalStateException("border repair did not converge");
+    }
+
+    private static boolean repairBorder(Screen a, Screen b, boolean vertical) {
+        int n = vertical ? World.SCREEN_H : World.SCREEN_W;
+        boolean dirty = false;
+        for (int i = 0; i < n; i++) {
+            int ax = vertical ? World.SCREEN_W - 1 : i, ay = vertical ? i : World.SCREEN_H - 1;
+            int bx = vertical ? 0 : i, by = vertical ? i : 0;
+            boolean wa = a.get(ax, ay).walkable, wb = b.get(bx, by).walkable;
+            if (wa && !wb) {
+                a.set(ax, ay, Tile.ROCK);
+                dirty = true;
+            } else if (!wa && wb) {
+                b.set(bx, by, Tile.ROCK);
+                dirty = true;
+            }
+        }
+        return dirty;
     }
 
     private static void renderLandmark(Landmark lm, Screen s, Random rng) {
@@ -651,8 +703,8 @@ public final class WorldGenerator {
 
     /** Post-conditions every generated world must satisfy. */
     static boolean valid(World w) {
-        return archetypeConstraintHolds(w) && entranceIsPlaced(w) && spawnIsWalkable(w) && allScreensReachable(w)
-                && enemiesAreLegal(w);
+        return archetypeConstraintHolds(w) && screenBordersMatch(w) && entranceIsPlaced(w) && spawnIsWalkable(w)
+                && allScreensReachable(w) && enemiesAreLegal(w);
     }
 
     static boolean archetypeConstraintHolds(World w) {
@@ -731,6 +783,29 @@ public final class WorldGenerator {
         for (boolean b : screenSeen) {
             if (!b) {
                 return false;
+            }
+        }
+        return true;
+    }
+
+    /** Every border tile pair is walkable on both sides or on neither. */
+    static boolean screenBordersMatch(World w) {
+        for (int sy = 0; sy < World.WORLD_H; sy++) {
+            for (int sx = 0; sx + 1 < World.WORLD_W; sx++) {
+                for (int y = 0; y < World.SCREEN_H; y++) {
+                    if (w.walkable(sx, sy, World.SCREEN_W - 1, y) != w.walkable(sx + 1, sy, 0, y)) {
+                        return false;
+                    }
+                }
+            }
+        }
+        for (int sy = 0; sy + 1 < World.WORLD_H; sy++) {
+            for (int sx = 0; sx < World.WORLD_W; sx++) {
+                for (int x = 0; x < World.SCREEN_W; x++) {
+                    if (w.walkable(sx, sy, x, World.SCREEN_H - 1) != w.walkable(sx, sy + 1, x, 0)) {
+                        return false;
+                    }
+                }
             }
         }
         return true;
