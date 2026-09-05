@@ -67,20 +67,42 @@ public final class TextureGen {
         return new Texture(pm);
     }
 
+    /** Sprite strip: cell 0 Link, cell 1 Grunt, cell 2 sword blade. */
     public static Texture sprites() {
-        Pixmap pm = new Pixmap(GameConfig.TILE, GameConfig.TILE, Pixmap.Format.RGBA8888);
-        for (int x = 0; x < GameConfig.TILE; x++) {
+        int w = 3 * GameConfig.TILE;
+        Pixmap pm = new Pixmap(w, GameConfig.TILE, Pixmap.Format.RGBA8888);
+        for (int x = 0; x < w; x++) {
             for (int y = 0; y < GameConfig.TILE; y++) {
-                int lx = x, ly = y;
+                int cell = x / GameConfig.TILE;
+                int lx = x % GameConfig.TILE, ly = y;
                 Color c = Color.CLEAR;
-                if (ly <= 4) {
-                    c = new Color(0.2f, 0.4f, 0.9f, 1); // hat
-                } else if (ly <= 6) {
-                    c = new Color(0.9f, 0.75f, 0.55f, 1); // face
-                } else if (ly <= 12 && lx >= 4 && lx <= 10) {
-                    c = new Color(0.2f, 0.7f, 0.3f, 1); // tunic
-                } else if (ly >= 13 && lx >= 5 && lx <= 9) {
-                    c = new Color(0.3f, 0.25f, 0.5f, 1); // legs
+                switch (cell) {
+                    case 0 -> {
+                        if (ly <= 4) {
+                            c = new Color(0.2f, 0.4f, 0.9f, 1); // hat
+                        } else if (ly <= 6) {
+                            c = new Color(0.9f, 0.75f, 0.55f, 1); // face
+                        } else if (ly <= 12 && lx >= 4 && lx <= 10) {
+                            c = new Color(0.2f, 0.7f, 0.3f, 1); // tunic
+                        } else if (ly >= 13 && lx >= 5 && lx <= 9) {
+                            c = new Color(0.3f, 0.25f, 0.5f, 1); // legs
+                        }
+                    }
+                    case 1 -> {
+                        // Grunt: a dark blob with two eyes
+                        if (lx >= 2 && lx <= 12 && ly >= 3 && ly <= 12) {
+                            c = new Color(0.55f, 0.25f, 0.2f, 1);
+                        }
+                        if ((lx == 5 || lx == 9) && ly >= 5 && ly <= 6) {
+                            c = new Color(1f, 0.9f, 0.3f, 1);
+                        }
+                    }
+                    default -> {
+                        // sword: a pale blade pointing right
+                        if (lx >= 2 && lx <= 12 && ly >= 6 && ly <= 8) {
+                            c = new Color(0.9f, 0.9f, 0.95f, 1);
+                        }
+                    }
                 }
                 pm.setColor(c);
                 pm.drawPixel(x, y);

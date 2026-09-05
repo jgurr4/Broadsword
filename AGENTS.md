@@ -14,4 +14,9 @@ Single-context: `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/agents/do
 
 ### Version Control
 
-Never commit any change without human approval first. 
+Never commit any change to the repo without human approval first. Have a commit message prepared for the work that was accomplished, and explain   how to close any tickets in case the user decides to manually do that.
+
+### Wiki Ingest
+
+Always have a `progress.md` file in the project (not in the `raw` or `wiki` folder) which explains the status of ingested raw files and how much   is left to be done. Update this every time you ingest more raw files into the wiki using the wiki-ingest skill
+

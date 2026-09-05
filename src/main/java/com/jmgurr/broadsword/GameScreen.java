@@ -52,8 +52,19 @@ public class GameScreen implements Screen {
     @Override
     public void render(float delta) {
         desired = readInput();
-        sim.tick(Math.min(delta, 0.1f), desired);
+        boolean swing = Gdx.input.isKeyJustPressed(Input.Keys.SPACE);
+        if (sim.phase() == Sim.Phase.GAME_OVER && Gdx.input.isKeyJustPressed(Input.Keys.R)) {
+            sim.respawn();
+        }
+        sim.tick(Math.min(delta, 0.1f), desired, swing);
         draw();
+    }
+
+    /** Draw the UI cell at (x, y) in a given color, tinting the region white base. */
+    private void drawUiCell(SpriteBatch b, int cell, float x, float y, com.badlogic.gdx.graphics.Color tint) {
+        b.setColor(tint);
+        b.draw(TextureGen.region(ui, cell), x, y);
+        b.setColor(1, 1, 1, 1);
     }
 
     private Link.Dir readInput() {
@@ -96,13 +107,39 @@ public class GameScreen implements Screen {
                 b.draw(tileRegions[cell], x * GameConfig.TILE, (World.SCREEN_H - 1 - y) * GameConfig.TILE);
             }
         }
-        b.draw(sprites, linkPxX, linkPxY, GameConfig.TILE, GameConfig.TILE);
-        // HUD: hearts top-left, magic below (both inset from the top edge)
-        for (int i = 0; i < GameConfig.MAX_HEARTS; i++) {
-            b.draw(TextureGen.region(ui, 0), 3 + i * 12, GameConfig.LOGICAL_H - 19);
+        // enemies: every live enemy of the current screen, in a distinct colour
+        com.badlogic.gdx.graphics.Color flash =
+                sim.invulnerable() && ((System.nanoTime() / 80_000_000L) & 1) == 0
+                        ? new com.badlogic.gdx.graphics.Color(1, 0.4f, 0.4f, 1)
+                        : com.badlogic.gdx.graphics.Color.WHITE;
+        b.setColor(flash);
+        for (com.jmgurr.broadsword.model.Enemy e : sim.enemies()) {
+            if (e.alive) {
+                b.draw(TextureGen.region(sprites, 1), e.tx * GameConfig.TILE, (World.SCREEN_H - 1 - e.ty) * GameConfig.TILE);
+            }
+        }
+        b.setColor(1, 1, 1, 1);
+        b.draw(TextureGen.region(sprites, 0), linkPxX, linkPxY, GameConfig.TILE, GameConfig.TILE);
+        // sword: the blade out in front of Link while swinging
+        if (sim.swinging()) {
+            Link.Dir f = link.facing;
+            b.draw(TextureGen.region(sprites, 2),
+                    (link.tx + f.dx) * GameConfig.TILE, (World.SCREEN_H - 1 - (link.ty + f.dy)) * GameConfig.TILE);
+        }
+        // HUD: hearts top-left (filled vs. lost), magic below (both inset from the top edge)
+        for (int i = 0; i < World.MAX_HEARTS; i++) {
+            drawUiCell(b, 0, 3 + i * 12, GameConfig.LOGICAL_H - 19,
+                    i < link.hearts ? com.badlogic.gdx.graphics.Color.WHITE : new com.badlogic.gdx.graphics.Color(0.3f, 0.3f, 0.3f, 1f));
         }
         for (int i = 0; i < GameConfig.MAX_MAGIC; i++) {
             b.draw(TextureGen.region(ui, 1), 3 + i * 12, GameConfig.LOGICAL_H - 38);
+        }
+        if (sim.phase() == Sim.Phase.GAME_OVER) {
+            layout.setText(font, "GAME OVER");
+            font.draw(b, "GAME OVER", (GameConfig.LOGICAL_W - layout.width) / 2, GameConfig.LOGICAL_H / 2f + 6);
+            layout.setText(font, "press R to respawn");
+            font.draw(b, "press R to respawn",
+                    (GameConfig.LOGICAL_W - layout.width) / 2, GameConfig.LOGICAL_H / 2f - 10);
         }
         // dev readout: what the screen is (a landmark overrides its archetype),
         // screen:tiles and the direction the input layer sees

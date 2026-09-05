@@ -13,6 +13,9 @@ public class World {
     public static final int SCREEN_W = 16;
     public static final int SCREEN_H = 10;
 
+    /** Link's starting (and maximum, in V1) Hearts. */
+    public static final int MAX_HEARTS = 3;
+
     public static final int SPAWN_SX = 20;
     public static final int SPAWN_SY = 5;
     public static final int SPAWN_TX = 8;
