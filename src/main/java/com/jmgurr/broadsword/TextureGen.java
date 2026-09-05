@@ -67,9 +67,14 @@ public final class TextureGen {
         return new Texture(pm);
     }
 
-    /** Sprite strip: cell 0 Link, cell 1 Grunt, cell 2 sword blade, cell 3 Octorock, cell 4 Fireball. */
+    /**
+     * Sprite strip: cell 0 Link front/back, cell 1 Grunt, cell 2 sword blade
+     * (horizontal), cell 3 Octorock, cell 4 Fireball, cell 5 Link side profile
+     * (facing left; flip for right), cell 6 sword blade (vertical), cell 7
+     * shield, cell 8 spawn cloud, cell 9 Link from behind (facing up).
+     */
     public static Texture sprites() {
-        int w = 5 * GameConfig.TILE;
+        int w = 10 * GameConfig.TILE;
         Pixmap pm = new Pixmap(w, GameConfig.TILE, Pixmap.Format.RGBA8888);
         for (int x = 0; x < w; x++) {
             for (int y = 0; y < GameConfig.TILE; y++) {
@@ -112,10 +117,70 @@ public final class TextureGen {
                             c = new Color(0.1f, 0.1f, 0.4f, 1);
                         }
                     }
-                    default -> {
+                    case 4 -> {
                         // Fireball: an orange-yellow dot
                         if (lx >= 4 && lx <= 10 && ly >= 4 && ly <= 10) {
                             c = new Color(1f, 0.7f, 0.1f, 1);
+                        }
+                    }
+                    case 5 -> {
+                        // Link side profile, facing left: hat, face with eye on
+                        // the left edge, tunic, legs mid-stride
+                        if (ly <= 4) {
+                            c = new Color(0.2f, 0.4f, 0.9f, 1); // hat
+                        } else if (ly <= 6) {
+                            c = lx >= 4 && lx <= 10 ? new Color(0.9f, 0.75f, 0.55f, 1) : Color.CLEAR;
+                            if (lx == 5 && ly == 6) {
+                                c = new Color(0.1f, 0.1f, 0.3f, 1); // eye
+                            }
+                        } else if (ly <= 12 && lx >= 5 && lx <= 10) {
+                            c = new Color(0.2f, 0.7f, 0.3f, 1); // tunic
+                        } else if (ly >= 13 && lx >= 5 && lx <= 7) {
+                            c = new Color(0.3f, 0.25f, 0.5f, 1); // leading leg
+                        } else if (ly >= 14 && lx >= 8 && lx <= 10) {
+                            c = new Color(0.25f, 0.2f, 0.45f, 1); // trailing leg
+                        }
+                    }
+                    case 6 -> {
+                        // sword: a pale blade pointing up
+                        if (lx >= 6 && lx <= 8 && ly >= 2 && ly <= 12) {
+                            c = new Color(0.9f, 0.9f, 0.95f, 1);
+                        }
+                    }
+                    case 7 -> {
+                        // shield: a blue rounded shield with a pale boss
+                        boolean body = lx >= 3 && lx <= 11 && ly >= 3 && ly <= 12
+                                && !(ly >= 11 && (lx <= 4 || lx >= 10));
+                        if (body) {
+                            c = new Color(0.15f, 0.35f, 0.8f, 1);
+                            if (lx >= 6 && lx <= 8 && ly >= 6 && ly <= 8) {
+                                c = new Color(0.9f, 0.9f, 0.95f, 1);
+                            } else if (lx == 3 || lx == 11 || ly == 3 || (ly == 12 && lx > 4 && lx < 10)) {
+                                c = new Color(0.5f, 0.52f, 0.6f, 1); // rim
+                            }
+                        }
+                    }
+                    case 8 -> {
+                        // spawn cloud: two overlapping grey puffs
+                        int dx1 = Math.max(0, Math.abs(lx - 5) + Math.abs(ly - 8) - 3);
+                        int dx2 = Math.max(0, Math.abs(lx - 10) + Math.abs(ly - 7) - 3);
+                        if (dx1 == 0 || dx2 == 0) {
+                            c = ((lx + ly) % 3 == 0) ? new Color(0.75f, 0.75f, 0.8f, 0.9f)
+                                    : new Color(0.62f, 0.62f, 0.7f, 0.85f);
+                        }
+                    }
+                    default -> {
+                        // Link from behind: hat peak, no face, boots apart
+                        if (ly <= 4) {
+                            c = lx >= 5 && lx <= 10 ? new Color(0.18f, 0.35f, 0.8f, 1) : Color.CLEAR;
+                        } else if (ly <= 6 && lx >= 4 && lx <= 11) {
+                            c = new Color(0.75f, 0.6f, 0.45f, 1); // back of head, shaded skin
+                        } else if (ly <= 12 && lx >= 4 && lx <= 10) {
+                            c = new Color(0.18f, 0.6f, 0.27f, 1); // tunic back
+                        } else if (ly >= 13 && lx >= 4 && lx <= 6) {
+                            c = new Color(0.3f, 0.25f, 0.5f, 1); // legs
+                        } else if (ly >= 13 && lx >= 8 && lx <= 10) {
+                            c = new Color(0.25f, 0.2f, 0.45f, 1);
                         }
                     }
                 }

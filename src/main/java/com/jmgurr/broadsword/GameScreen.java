@@ -114,9 +114,20 @@ public class GameScreen implements Screen {
                         : com.badlogic.gdx.graphics.Color.WHITE;
         b.setColor(flash);
         for (com.jmgurr.broadsword.model.Enemy e : sim.enemies()) {
-            if (e.alive) {
+            if (!e.alive) {
+                continue;
+            }
+            float ex = e.tx * GameConfig.TILE;
+            float ey = (World.SCREEN_H - 1 - e.ty) * GameConfig.TILE;
+            if (Sim.spawning(e)) {
+                // pulsing cloud: the enemy materialises after ENEMY_SPAWN_DURATION
+                float pulse = 0.5f + 0.5f * (e.spawning / Sim.ENEMY_SPAWN_DURATION);
+                b.setColor(1, 1, 1, 0.55f + 0.45f * pulse);
+                b.draw(TextureGen.region(sprites, 8), ex, ey);
+                b.setColor(flash);
+            } else {
                 int cell = e.kind == com.jmgurr.broadsword.model.EnemyKind.OCTOROCK ? 3 : 1;
-                b.draw(TextureGen.region(sprites, cell), e.tx * GameConfig.TILE, (World.SCREEN_H - 1 - e.ty) * GameConfig.TILE);
+                b.draw(TextureGen.region(sprites, cell), ex, ey);
             }
         }
         b.setColor(1, 1, 1, 1);
@@ -125,12 +136,32 @@ public class GameScreen implements Screen {
                 b.draw(TextureGen.region(sprites, 4), p.tx * GameConfig.TILE, (World.SCREEN_H - 1 - p.ty) * GameConfig.TILE);
             }
         }
-        b.draw(TextureGen.region(sprites, 0), linkPxX, linkPxY, GameConfig.TILE, GameConfig.TILE);
-        // sword: the blade out in front of Link while swinging
+        // Link: a distinct sprite per facing direction (side profile flipped L/R)
+        Link.Dir f = link.facing;
+        switch (f) {
+            case UP -> b.draw(TextureGen.region(sprites, 9), linkPxX, linkPxY, GameConfig.TILE, GameConfig.TILE);
+            case DOWN -> b.draw(TextureGen.region(sprites, 0), linkPxX, linkPxY, GameConfig.TILE, GameConfig.TILE);
+            case LEFT -> b.draw(TextureGen.region(sprites, 5), linkPxX, linkPxY, GameConfig.TILE, GameConfig.TILE);
+            case RIGHT -> b.draw(TextureGen.region(sprites, 5), linkPxX + GameConfig.TILE, linkPxY,
+                    -GameConfig.TILE, GameConfig.TILE); // negative width flips horizontally
+        }
+        // shield: carried on the edge Link faces; tucked away while swinging
+        if (!sim.swinging()) {
+            b.draw(TextureGen.region(sprites, 7),
+                    linkPxX + f.dx * 4, linkPxY + f.dy * 4);
+        }
+        // sword: the blade out in front of Link while swinging, oriented along
+        // the swing so up/down stabs read as stabs (negative size flips)
         if (sim.swinging()) {
-            Link.Dir f = link.facing;
-            b.draw(TextureGen.region(sprites, 2),
-                    (link.tx + f.dx) * GameConfig.TILE, (World.SCREEN_H - 1 - (link.ty + f.dy)) * GameConfig.TILE);
+            float w = GameConfig.TILE * 0.6f;
+            float h = GameConfig.TILE * 1.6f;
+            switch (f) {
+                case RIGHT -> b.draw(TextureGen.region(sprites, 2), linkPxX + GameConfig.TILE * 0.4f, linkPxY, h, GameConfig.TILE);
+                case LEFT -> b.draw(TextureGen.region(sprites, 2), linkPxX + GameConfig.TILE * 0.6f, linkPxY, -h, GameConfig.TILE);
+                // pixel y grows up-screen: UP extends with +h, DOWN with -h
+                case UP -> b.draw(TextureGen.region(sprites, 6), linkPxX + (GameConfig.TILE - w) / 2, linkPxY - GameConfig.TILE * 0.3f, w, h);
+                case DOWN -> b.draw(TextureGen.region(sprites, 6), linkPxX + (GameConfig.TILE - w) / 2, linkPxY + GameConfig.TILE * 0.3f, w, -h);
+            }
         }
         // HUD: hearts top-left (filled vs. lost), magic below (both inset from the top edge)
         for (int i = 0; i < World.MAX_HEARTS; i++) {

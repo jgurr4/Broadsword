@@ -16,6 +16,8 @@ public final class Enemy {
     public boolean stunned = false;
     /** Octorock: seconds until the next Fireball may be fired. */
     public float fireTimer = 0;
+    /** Seconds until this enemy materialises; while > 0 it is a harmless cloud. */
+    public float spawning = 0;
     /** Deterministic per-enemy wander: seeded from world seed + screen + slot. */
     final Random rng;
 

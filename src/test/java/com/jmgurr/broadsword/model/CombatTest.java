@@ -87,6 +87,12 @@ class CombatTest {
         sim.tick(Sim.ENEMY_STEP_INTERVAL, null);
     }
 
+    /** Let every spawning cloud on the current screen materialise. */
+    private static void materialize(Sim sim) {
+        sim.tick(Sim.ENEMY_SPAWN_DURATION, null);
+        assertTrue(sim.enemies().stream().noneMatch(Sim::spawning));
+    }
+
     /** Hold a direction long enough for Link to take one tile step. */
     private static void step(Sim sim, Link.Dir d) {
         for (int i = 0; i < 100; i++) {
@@ -406,6 +412,77 @@ class CombatTest {
         assertTrue(live.stream().allMatch(e -> e.alive));
     }
 
+    // ---- spawn clouds ------------------------------------------------------
+
+    @Test
+    void enemiesEnterTheScreenAsSpawningClouds() {
+        Sim sim = new Sim(5L);
+        int[] screen = firstGruntScreen(sim.world());
+        Link l = sim.link();
+        l.sx = screen[0];
+        l.sy = screen[1];
+        sim.tick(0.01f, null);
+        assertTrue(sim.enemies().stream().allMatch(Sim::spawning),
+                "every enemy starts as a cloud");
+
+        // a cloud cannot hurt Link, even standing on it
+        Enemy cloud = sim.enemies().get(0);
+        l.tx = cloud.tx;
+        l.ty = cloud.ty;
+        l.hearts = World.MAX_HEARTS;
+        enemyStep(sim);
+        assertEquals(World.MAX_HEARTS, l.hearts, "a cloud does not do contact damage");
+
+        // ...and does not move
+        int tx = cloud.tx, ty = cloud.ty;
+        idle(sim, 0.5f);
+        assertEquals(tx, cloud.tx);
+        assertEquals(ty, cloud.ty);
+        assertTrue(Sim.spawning(cloud));
+
+        // after the 2s are up it is a live enemy again: it moves (chases Link)
+        idle(sim, Sim.ENEMY_SPAWN_DURATION);
+        assertFalse(Sim.spawning(cloud));
+        l.tx = tx - 3;
+        l.ty = ty;
+        boolean moved = false;
+        for (int i = 0; i < 20 && !moved; i++) {
+            enemyStep(sim);
+            moved = cloud.tx != tx || cloud.ty != ty;
+        }
+        assertTrue(moved, "a materialised enemy moves again");
+    }
+
+    @Test
+    void enemiesRespawnInNewPlacesOnEveryEntry() {
+        Sim sim = new Sim(5L);
+        int[] screen = firstGruntScreen(sim.world());
+        Link l = sim.link();
+        l.sx = screen[0];
+        l.sy = screen[1];
+        sim.tick(0.01f, null);
+        List<String> first = positions(sim);
+        assertTrue(sim.world().enemies(l.sx, l.sy).size() >= 3,
+                "screen has enough enemies for the layout to move");
+
+        int neighbour = screen[0] > 0 ? screen[0] - 1 : screen[0] + 1;
+        boolean differs = false;
+        for (int visit = 0; visit < 8 && !differs; visit++) {
+            l.sx = neighbour;
+            sim.tick(0.01f, null);
+            l.sx = screen[0];
+            sim.tick(0.01f, null);
+            if (!positions(sim).equals(first)) {
+                differs = true;
+            }
+        }
+        assertTrue(differs, "re-entering the screen re-rolls the enemy layout");
+    }
+
+    private static List<String> positions(Sim sim) {
+        return sim.enemies().stream().map(e -> e.kind + "@" + e.tx + "," + e.ty).sorted().toList();
+    }
+
     @Test
     void killedEnemiesRespawnWhenLinkLeavesAndReturns() {
         Sim sim = new Sim(5L);
@@ -414,6 +491,7 @@ class CombatTest {
         l.sx = screen[0];
         l.sy = screen[1];
         sim.tick(Sim.ENEMY_STEP_INTERVAL, null);
+        materialize(sim);
         Enemy target = sim.enemies().stream().filter(e -> e.kind == EnemyKind.GRUNT).findFirst().orElseThrow();
 
         kill(sim, target);
@@ -441,6 +519,7 @@ class CombatTest {
         l.sx = screen[0];
         l.sy = screen[1];
         sim.tick(Sim.ENEMY_STEP_INTERVAL, null);
+        materialize(sim);
         int placed = sim.enemies().size();
         Enemy target = sim.enemies().stream().filter(e -> e.kind == EnemyKind.GRUNT).findFirst().orElseThrow();
         kill(sim, target);
@@ -456,7 +535,7 @@ class CombatTest {
         sim.respawn();
         l.sx = screen[0];
         l.sy = screen[1];
-        sim.tick(Sim.ENEMY_STEP_INTERVAL, null);
+        sim.tick(Sim.ENEMY_SPAWN_DURATION, null);
         assertTrue(sim.enemies().stream().anyMatch(e -> e.alive && e.kind == EnemyKind.GRUNT),
                 "non-persistent state: enemy spawns reset on death");
     }

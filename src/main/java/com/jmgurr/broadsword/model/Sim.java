@@ -2,6 +2,7 @@ package com.jmgurr.broadsword.model;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Random;
 import java.util.function.Consumer;
 
 /**
@@ -34,6 +35,8 @@ public final class Sim {
     public static final float OCTOROCK_FIRE_INTERVAL = 1.5f;
     /** Projectile clock: one tile per step (~10 tiles/sec). */
     public static final float PROJECTILE_STEP_INTERVAL = 0.1f;
+    /** Seconds an enemy spends as a spawning cloud before it materialises. */
+    public static final float ENEMY_SPAWN_DURATION = 2.0f;
 
     public enum Phase {
         PLAYING, GAME_OVER
@@ -139,12 +142,17 @@ public final class Sim {
             trySwing();
         }
         if (enemyScreenKey != screenKey(link.sx, link.sy)) {
-            placeScreenEnemies(); // leaving and returning respawns the placed tiles
+            placeScreenEnemies(); // leaving and returning respawns the tiles, jittered, in clouds
             enemyTimer = 0;
             projectileTimer = 0;
         }
         for (Enemy e : enemies) {
-            if (e.alive && e.kind == EnemyKind.OCTOROCK) {
+            if (!e.alive) {
+                continue;
+            }
+            if (e.spawning > 0) {
+                e.spawning = Math.max(0, e.spawning - delta);
+            } else if (e.kind == EnemyKind.OCTOROCK) {
                 e.fireTimer = Math.max(0, e.fireTimer - delta);
             }
         }
@@ -178,7 +186,7 @@ public final class Sim {
         int hx = link.tx + link.facing.dx;
         int hy = link.ty + link.facing.dy;
         for (Enemy e : enemies) {
-            if (e.alive && e.tx == hx && e.ty == hy) {
+            if (e.alive && e.spawning <= 0 && e.tx == hx && e.ty == hy) {
                 hit(e);
             }
         }
@@ -212,8 +220,8 @@ public final class Sim {
     private void stepEnemies() {
         boolean hitNow = false;
         for (Enemy e : enemies) {
-            if (!e.alive) {
-                continue;
+            if (!e.alive || e.spawning > 0) {
+                continue; // a cloud neither moves nor hurts
             }
             if (e.kind == EnemyKind.GRUNT) {
                 stepGrunt(e);
@@ -383,17 +391,46 @@ public final class Sim {
         return false;
     }
 
-    /** (Re)place the generator's enemies for Link's current screen; all alive. */
+    /**
+     * (Re)place the generator's enemies for Link's current screen. The kind
+     * and count come from the generator; the tile is re-rolled on every entry
+     * around the placed tile, so a screen is never an ambush you can memorise.
+     * Every enemy starts as a 2s spawning cloud, and never on Link's tile.
+     */
     private void placeScreenEnemies() {
         enemies.clear();
         projectiles.clear();
         List<EnemySpawn> placed = world.enemies(link.sx, link.sy);
+        int key = screenKey(link.sx, link.sy);
+        // visit counter makes every entry's layout different even on revisit
+        entryCounter++;
+        long layoutSeed = (world.usedSeed() * 1000003L + key * 31337L + entryCounter * 7919L) >>> 1;
+        Random layoutRng = new Random(layoutSeed);
         for (int slot = 0; slot < placed.size(); slot++) {
             EnemySpawn s = placed.get(slot);
-            long wanderSeed = world.usedSeed() * 1000003L + screenKey(link.sx, link.sy) * 31337L + slot;
-            enemies.add(new Enemy(s.kind(), s.tx(), s.ty(), enemyHp(s.kind()), wanderSeed));
+            long wanderSeed = world.usedSeed() * 1000003L + key * 31337L + slot;
+            int tx = jitteredTile(layoutRng, s.tx(), 0, World.SCREEN_W - 1);
+            int ty = jitteredTile(layoutRng, s.ty(), 0, World.SCREEN_H - 1);
+            if (tx == link.tx && ty == link.ty) {
+                tx = tx + 1 < World.SCREEN_W ? tx + 1 : tx - 1;
+            }
+            if (!world.walkable(link.sx, link.sy, tx, ty) || liveEnemyAt(tx, ty)) {
+                tx = s.tx();
+                ty = s.ty();
+            }
+            Enemy e = new Enemy(s.kind(), tx, ty, enemyHp(s.kind()), wanderSeed);
+            e.spawning = ENEMY_SPAWN_DURATION;
+            enemies.add(e);
         }
-        enemyScreenKey = screenKey(link.sx, link.sy);
+        enemyScreenKey = key;
+    }
+
+    private long entryCounter = 0;
+
+    /** Nudge a placed tile by -2..+2, clamped into the screen. */
+    private static int jitteredTile(Random rng, int v, int min, int max) {
+        int j = v + rng.nextInt(5) - 2;
+        return Math.max(min, Math.min(max, j));
     }
 
     private static int screenKey(int sx, int sy) {
@@ -440,6 +477,11 @@ public final class Sim {
     /** True while the blade is out (shield is down while swinging). */
     public boolean swinging() {
         return swingTimer > 0;
+    }
+
+    /** True while this enemy is still a spawning cloud (harmless, immobile). */
+    public static boolean spawning(Enemy e) {
+        return e.alive && e.spawning > 0;
     }
 
     /** Live enemies on Link's current screen; tests place and inspect enemies here. */
