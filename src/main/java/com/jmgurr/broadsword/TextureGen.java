@@ -67,9 +67,9 @@ public final class TextureGen {
         return new Texture(pm);
     }
 
-    /** Sprite strip: cell 0 Link, cell 1 Grunt, cell 2 sword blade. */
+    /** Sprite strip: cell 0 Link, cell 1 Grunt, cell 2 sword blade, cell 3 Octorock, cell 4 Fireball. */
     public static Texture sprites() {
-        int w = 3 * GameConfig.TILE;
+        int w = 5 * GameConfig.TILE;
         Pixmap pm = new Pixmap(w, GameConfig.TILE, Pixmap.Format.RGBA8888);
         for (int x = 0; x < w; x++) {
             for (int y = 0; y < GameConfig.TILE; y++) {
@@ -97,10 +97,25 @@ public final class TextureGen {
                             c = new Color(1f, 0.9f, 0.3f, 1);
                         }
                     }
-                    default -> {
+                    case 2 -> {
                         // sword: a pale blade pointing right
                         if (lx >= 2 && lx <= 12 && ly >= 6 && ly <= 8) {
                             c = new Color(0.9f, 0.9f, 0.95f, 1);
+                        }
+                    }
+                    case 3 -> {
+                        // Octorock: an orange squid blob with two eyes
+                        if (lx >= 2 && lx <= 12 && ly >= 4 && ly <= 12) {
+                            c = new Color(0.9f, 0.5f, 0.15f, 1);
+                        }
+                        if ((lx == 5 || lx == 9) && ly >= 6 && ly <= 7) {
+                            c = new Color(0.1f, 0.1f, 0.4f, 1);
+                        }
+                    }
+                    default -> {
+                        // Fireball: an orange-yellow dot
+                        if (lx >= 4 && lx <= 10 && ly >= 4 && ly <= 10) {
+                            c = new Color(1f, 0.7f, 0.1f, 1);
                         }
                     }
                 }

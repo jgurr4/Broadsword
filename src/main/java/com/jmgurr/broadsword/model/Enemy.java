@@ -14,6 +14,8 @@ public final class Enemy {
     public boolean alive = true;
     /** True after a sword hit; costs this enemy its next step. */
     public boolean stunned = false;
+    /** Octorock: seconds until the next Fireball may be fired. */
+    public float fireTimer = 0;
     /** Deterministic per-enemy wander: seeded from world seed + screen + slot. */
     final Random rng;
 

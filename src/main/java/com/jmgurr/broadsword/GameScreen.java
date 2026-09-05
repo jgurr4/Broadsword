@@ -115,10 +115,16 @@ public class GameScreen implements Screen {
         b.setColor(flash);
         for (com.jmgurr.broadsword.model.Enemy e : sim.enemies()) {
             if (e.alive) {
-                b.draw(TextureGen.region(sprites, 1), e.tx * GameConfig.TILE, (World.SCREEN_H - 1 - e.ty) * GameConfig.TILE);
+                int cell = e.kind == com.jmgurr.broadsword.model.EnemyKind.OCTOROCK ? 3 : 1;
+                b.draw(TextureGen.region(sprites, cell), e.tx * GameConfig.TILE, (World.SCREEN_H - 1 - e.ty) * GameConfig.TILE);
             }
         }
         b.setColor(1, 1, 1, 1);
+        for (com.jmgurr.broadsword.model.Projectile p : sim.projectiles()) {
+            if (p.alive) {
+                b.draw(TextureGen.region(sprites, 4), p.tx * GameConfig.TILE, (World.SCREEN_H - 1 - p.ty) * GameConfig.TILE);
+            }
+        }
         b.draw(TextureGen.region(sprites, 0), linkPxX, linkPxY, GameConfig.TILE, GameConfig.TILE);
         // sword: the blade out in front of Link while swinging
         if (sim.swinging()) {

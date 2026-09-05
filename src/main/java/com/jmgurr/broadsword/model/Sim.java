@@ -22,8 +22,18 @@ public final class Sim {
     public static final float I_FRAME_DURATION = 1.0f;
     /** Sword hits to kill a Grunt. */
     public static final int GRUNT_HP = 2;
+    /** Sword hits to kill an Octorock. */
+    public static final int OCTOROCK_HP = 2;
     /** Manhattan distance at which a Grunt switches from patrol to chase. */
     public static final int GRUNT_AGGRO_TILES = 8;
+    /** Octorock: holds distance while the gap is within this... */
+    public static final int OCTOROCK_HOLD_TILES = 5;
+    /** Octorock: ...and retreats once the gap drops to this. */
+    public static final int OCTOROCK_RETREAT_TILES = 3;
+    /** Octorock: seconds between Fireball attempts (needs line-of-sight). */
+    public static final float OCTOROCK_FIRE_INTERVAL = 1.5f;
+    /** Projectile clock: one tile per step (~10 tiles/sec). */
+    public static final float PROJECTILE_STEP_INTERVAL = 0.1f;
 
     public enum Phase {
         PLAYING, GAME_OVER
@@ -47,7 +57,10 @@ public final class Sim {
 
     /** Live enemies of the screen Link currently occupies. */
     private final List<Enemy> enemies = new ArrayList<>();
+    /** In-flight projectiles on the current screen. */
+    private final List<Projectile> projectiles = new ArrayList<>();
     private int enemyScreenKey = Integer.MIN_VALUE;
+    private float projectileTimer = 0;
 
     /** A new game: fresh world from the seed, Link at spawn. */
     public Sim(long seed) {
@@ -128,11 +141,22 @@ public final class Sim {
         if (enemyScreenKey != screenKey(link.sx, link.sy)) {
             placeScreenEnemies(); // leaving and returning respawns the placed tiles
             enemyTimer = 0;
+            projectileTimer = 0;
+        }
+        for (Enemy e : enemies) {
+            if (e.alive && e.kind == EnemyKind.OCTOROCK) {
+                e.fireTimer = Math.max(0, e.fireTimer - delta);
+            }
         }
         enemyTimer += delta;
         if (enemyTimer >= ENEMY_STEP_INTERVAL) {
             enemyTimer = 0;
             stepEnemies();
+        }
+        projectileTimer += delta;
+        while (projectileTimer >= PROJECTILE_STEP_INTERVAL) {
+            projectileTimer -= PROJECTILE_STEP_INTERVAL;
+            stepProjectiles();
         }
     }
 
@@ -193,25 +217,34 @@ public final class Sim {
             }
             if (e.kind == EnemyKind.GRUNT) {
                 stepGrunt(e);
+            } else if (e.kind == EnemyKind.OCTOROCK) {
+                stepOctorock(e);
             }
-            // Octorock AI lands with T5 (stationary for now)
             if (e.alive && e.tx == link.tx && e.ty == link.ty) {
                 hitNow = true; // contact: 1 Heart per tick, not per enemy
             }
         }
-        if (hitNow && invulnTimer <= 0) {
-            link.hearts -= 1;
-            invulnTimer = I_FRAME_DURATION;
-            if (link.hearts <= 0) {
-                link.hearts = 0;
-                phase = Phase.GAME_OVER;
-            }
+        if (hitNow) {
+            damageLink();
+        }
+    }
+
+    /** Take 1 Heart, obeying i-frames; 0 Hearts ends the run. */
+    private void damageLink() {
+        if (invulnTimer > 0) {
+            return;
+        }
+        link.hearts -= 1;
+        invulnTimer = I_FRAME_DURATION;
+        if (link.hearts <= 0) {
+            link.hearts = 0;
+            phase = Phase.GAME_OVER;
         }
     }
 
     /** V1 HP default for every species (tunable per kind when they diverge). */
     static int enemyHp(EnemyKind kind) {
-        return GRUNT_HP;
+        return kind == EnemyKind.OCTOROCK ? OCTOROCK_HP : GRUNT_HP;
     }
 
     /** Grunt: chase within aggro radius, random walk beyond it; blocked by terrain and enemies. */
@@ -223,21 +256,109 @@ public final class Sim {
         int dist = Math.abs(e.tx - link.tx) + Math.abs(e.ty - link.ty);
         if (dist <= GRUNT_AGGRO_TILES) {
             // chase: close on the axis with the bigger gap (x wins ties)
-            int dx = Integer.signum(link.tx - e.tx);
-            int dy = Integer.signum(link.ty - e.ty);
-            boolean xFirst = Math.abs(link.tx - e.tx) >= Math.abs(link.ty - e.ty);
-            if (dx != 0 && tryEnemyMove(e, xFirst ? dx : 0, xFirst ? 0 : dy)) {
-                return;
-            }
-            if (dy != 0) {
-                tryEnemyMove(e, 0, dy);
-            }
+            stepEnemyAlong(e, Integer.signum(link.tx - e.tx), Integer.signum(link.ty - e.ty),
+                    Math.abs(link.tx - e.tx) >= Math.abs(link.ty - e.ty));
             return;
         }
         // patrol: random direction, stay put if blocked
         Link.Dir[] dirs = Link.Dir.values();
         Link.Dir d = dirs[e.rng.nextInt(4)];
         tryEnemyMove(e, d.dx, d.dy);
+    }
+
+    /**
+     * Octorock: holds ~5 tiles, retreats at <=3, and fires a Fireball down a
+     * clear cardinal line of sight at the rate clock. Never wanders: standing
+     * still is what makes its range readable.
+     */
+    private void stepOctorock(Enemy e) {
+        if (e.stunned) {
+            e.stunned = false;
+            return;
+        }
+        int ddx = link.tx - e.tx, ddy = link.ty - e.ty;
+        int dist = Math.abs(ddx) + Math.abs(ddy);
+        if (dist <= OCTOROCK_RETREAT_TILES) {
+            // retreat: back away from Link, preferred axis first, other axis as fallback
+            stepEnemyAlong(e, -Integer.signum(ddx), -Integer.signum(ddy), Math.abs(ddx) >= Math.abs(ddy));
+        } else if (dist > OCTOROCK_HOLD_TILES) {
+            // close in the Grunt's manner: bigger gap first (x wins ties)
+            stepEnemyAlong(e, Integer.signum(ddx), Integer.signum(ddy), Math.abs(ddx) >= Math.abs(ddy));
+        }
+        if (e.fireTimer <= 0) {
+            // aim after moving: recompute the gap, no lead
+            ddx = link.tx - e.tx;
+            ddy = link.ty - e.ty;
+            int fdx = Integer.signum(ddx), fdy = Integer.signum(ddy);
+            // aimed, no lead: only down a clear cardinal lane
+            if ((ddx == 0) != (ddy == 0) && lineClear(e.tx, e.ty, link.tx, link.ty)) {
+                Projectile p = new Projectile(e.tx + fdx, e.ty + fdy, fdx, fdy);
+                e.fireTimer = OCTOROCK_FIRE_INTERVAL;
+                if (p.tx == link.tx && p.ty == link.ty) {
+                    hitLinkByProjectile(p); // point-blank: hit on the firing tile
+                } else {
+                    projectiles.add(p);
+                }
+            }
+        }
+    }
+
+    /** Straight cardinal lane between two tiles, exclusive of the endpoints, obstacle-free. */
+    private boolean lineClear(int fromX, int fromY, int toX, int toY) {
+        int dx = Integer.signum(toX - fromX), dy = Integer.signum(toY - fromY);
+        int x = fromX + dx, y = fromY + dy;
+        while (x != toX || y != toY) {
+            if (!world.walkable(link.sx, link.sy, x, y)) {
+                return false;
+            }
+            x += dx;
+            y += dy;
+        }
+        return true;
+    }
+
+    private void stepProjectiles() {
+        for (Projectile p : projectiles) {
+            if (!p.alive) {
+                continue;
+            }
+            p.tx += p.dx;
+            p.ty += p.dy;
+            if (p.tx < 0 || p.tx >= World.SCREEN_W || p.ty < 0 || p.ty >= World.SCREEN_H) {
+                p.alive = false; // off the screen
+            } else if (!world.walkable(link.sx, link.sy, p.tx, p.ty)) {
+                p.alive = false; // into an obstacle
+            } else if (p.tx == link.tx && p.ty == link.ty) {
+                hitLinkByProjectile(p);
+            }
+        }
+        projectiles.removeIf(p -> !p.alive);
+    }
+
+    /**
+     * The V1 shield: a Fireball Link is facing is destroyed on impact while he
+     * is not swinging. A swinging shield does not stop it, and neither does a
+     * projectile arriving from a side he is not facing. No reflect.
+     */
+    private void hitLinkByProjectile(Projectile p) {
+        p.alive = false;
+        boolean facingSource = link.facing.dx == -p.dx && link.facing.dy == -p.dy;
+        if (facingSource && !swinging()) {
+            return;
+        }
+        damageLink();
+    }
+
+    /**
+     * Step one tile toward (dx, dy) - each -1, 0 or 1 - preferring the x axis
+     * when {@code xFirst}, and falling back to the other axis if that tile is
+     * blocked.
+     */
+    private boolean stepEnemyAlong(Enemy e, int dx, int dy, boolean xFirst) {
+        if (xFirst) {
+            return tryEnemyMove(e, dx, 0) || tryEnemyMove(e, 0, dy);
+        }
+        return tryEnemyMove(e, 0, dy) || tryEnemyMove(e, dx, 0);
     }
 
     private boolean tryEnemyMove(Enemy e, int dx, int dy) {
@@ -265,6 +386,7 @@ public final class Sim {
     /** (Re)place the generator's enemies for Link's current screen; all alive. */
     private void placeScreenEnemies() {
         enemies.clear();
+        projectiles.clear();
         List<EnemySpawn> placed = world.enemies(link.sx, link.sy);
         for (int slot = 0; slot < placed.size(); slot++) {
             EnemySpawn s = placed.get(slot);
@@ -296,6 +418,7 @@ public final class Sim {
         swingTimer = 0;
         enemyTimer = 0;
         stepTimer = 0;
+        projectileTimer = 0;
         interpolating = false;
         interpProgress = 1;
         phase = Phase.PLAYING;
@@ -322,6 +445,11 @@ public final class Sim {
     /** Live enemies on Link's current screen; tests place and inspect enemies here. */
     public List<Enemy> enemies() {
         return enemies;
+    }
+
+    /** In-flight projectiles on Link's current screen. */
+    public List<Projectile> projectiles() {
+        return projectiles;
     }
 
     /** True while Link cannot be hurt (i-frames active). */
