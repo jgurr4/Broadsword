@@ -1,11 +1,13 @@
 package com.jmgurr.broadsword;
 
 import com.badlogic.gdx.Game;
-import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.utils.Scaling;
 import com.badlogic.gdx.utils.viewport.ScalingViewport;
+import com.jmgurr.broadsword.model.SaveState;
+import com.jmgurr.broadsword.model.Sim;
+import com.jmgurr.broadsword.model.World;
 
 public class BroadswordGame extends Game {
     private SpriteBatch batch;
@@ -23,7 +25,17 @@ public class BroadswordGame extends Game {
         tiles = TextureGen.tiles();
         ui = TextureGen.ui();
         sprites = TextureGen.sprites();
-        setScreen(new GameScreen(this));
+        setScreen(new TitleScreen(this));
+    }
+
+    /** New game: fresh seed, spawn position; the new run overwrites the save immediately. */
+    public void newGame() {
+        setScreen(new GameScreen(this, new Sim(World.randomSeed())));
+    }
+
+    /** Continue: re-derive the saved world and resume at the saved position. */
+    public void continueGame(SaveState save) {
+        setScreen(new GameScreen(this, new Sim(save)));
     }
 
     @Override

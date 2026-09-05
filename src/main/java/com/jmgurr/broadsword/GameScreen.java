@@ -26,9 +26,13 @@ public class GameScreen implements Screen {
     private final GlyphLayout layout = new GlyphLayout();
     private Link.Dir desired = null;
 
-    public GameScreen(BroadswordGame game) {
+    public GameScreen(BroadswordGame game, Sim sim) {
         this.game = game;
-        this.sim = new Sim(GameConfig.SEED);
+        this.sim = sim;
+        sim.setSaveSink(SaveFiles::write);
+        // anchor the save at spawn right away: closing before the first
+        // transition must never leave the previous run's save behind
+        sim.autosave();
         this.tiles = game.tiles();
         this.ui = game.ui();
         this.sprites = game.sprites();

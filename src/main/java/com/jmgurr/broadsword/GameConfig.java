@@ -2,7 +2,6 @@ package com.jmgurr.broadsword;
 
 /** Constants; tunables live at the top of their system. */
 public final class GameConfig {
-    public static final long SEED = 42L;
 
     // logical game resolution — derived from the screen's tile geometry
     public static final int TILE = 15;
