@@ -2,6 +2,7 @@ package com.jmgurr.broadsword.model;
 
 import java.util.Collections;
 import java.util.EnumMap;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
@@ -21,6 +22,10 @@ public class World implements Terrain {
 
     /** Cave entry tile (below it sits the exit stairs, in the wall). */
     public static final int CAVE_ENTRY_TX = 8, CAVE_ENTRY_TY = 1;
+
+    /** Rock-formation cave room: a 4x3 interior, Link enters at ENTRY, exit stairs one step south. */
+    public static final int ROCK_CAVE_X0 = 6, ROCK_CAVE_X1 = 9, ROCK_CAVE_Y0 = 3, ROCK_CAVE_Y1 = 5;
+    public static final int ROCK_CAVE_ENTRY_TX = 8, ROCK_CAVE_ENTRY_TY = 3;
 
     public static final int SPAWN_SX = 20;
     public static final int SPAWN_SY = 5;
@@ -42,12 +47,13 @@ public class World implements Terrain {
     private final ScreenPos secretTree;
     private final Map<Landmark, ScreenPos> landmarks;
     private final List<EnemySpawn>[] enemiesByScreen;
-    private final Screen cave;
+    /** All caves of this world, keyed by the packed global tile of their overworld entrance. */
+    private final Map<Integer, Cave> caves;
 
     @SuppressWarnings("unchecked")
     World(long seed, long usedSeed, int attempts, Screen[][] screens, Archetype[][] archetypes, int[][] tiers,
             ScreenPos entrance, Map<Landmark, ScreenPos> landmarks, List<EnemySpawn>[] enemiesByScreen,
-            ScreenPos secretTree) {
+            ScreenPos secretTree, Map<Integer, Cave> caves) {
         this.seed = seed;
         this.usedSeed = usedSeed;
         this.attempts = attempts;
@@ -58,7 +64,13 @@ public class World implements Terrain {
         this.secretTree = secretTree;
         this.landmarks = Collections.unmodifiableMap(new EnumMap<>(landmarks));
         this.enemiesByScreen = enemiesByScreen;
-        this.cave = buildCave();
+        this.caves = caves;
+        // The Old woman's Cave sits behind the Secret tree in every world; its entrance
+        // tile only becomes walkable when the tree burns.
+        if (secretTree != null && secretTree.sx() >= 0) {
+            caves.putIfAbsent(packCave(secretTree.sx(), secretTree.sy(), secretTree.tx(), secretTree.ty()),
+                    new Cave(secretTree, buildCave(), CAVE_ENTRY_TX, CAVE_ENTRY_TY, null));
+        }
     }
 
     /** The Old woman's Cave: a walled off-grid room with the return stairs in the south wall. */
@@ -76,14 +88,68 @@ public class World implements Terrain {
         return s;
     }
 
-    /** The Cave screen (same layout in every world; holds nothing in V1). */
+    /** A rock-formation cave room: solid rock with a 4x3 grass interior and exit stairs inside it. */
+    static Screen buildRockCaveRoom() {
+        Screen s = new Screen();
+        for (int y = 0; y < World.SCREEN_H; y++) {
+            for (int x = 0; x < World.SCREEN_W; x++) {
+                s.set(x, y, Tile.ROCK);
+            }
+        }
+        for (int y = ROCK_CAVE_Y0; y <= ROCK_CAVE_Y1; y++) {
+            for (int x = ROCK_CAVE_X0; x <= ROCK_CAVE_X1; x++) {
+                s.set(x, y, Tile.GRASS);
+            }
+        }
+        s.set(ROCK_CAVE_ENTRY_TX, ROCK_CAVE_ENTRY_TY + 1, Tile.STAIRS);
+        return s;
+    }
+
+    /** Key for the caves map: the packed global tile of the cave's overworld entrance. */
+    public static int packCave(int sx, int sy, int tx, int ty) {
+        return ((sy * WORLD_W + sx) * SCREEN_W + tx) * SCREEN_H + ty;
+    }
+
+    public static int caveKeySx(int key) {
+        return (key / (SCREEN_W * SCREEN_H)) % WORLD_W;
+    }
+
+    public static int caveKeySy(int key) {
+        return key / (SCREEN_W * SCREEN_H * WORLD_W);
+    }
+
+    public static int caveKeyTx(int key) {
+        return (key / SCREEN_H) % SCREEN_W;
+    }
+
+    public static int caveKeyTy(int key) {
+        return key % SCREEN_H;
+    }
+
+    /** The cave whose overworld entrance is this tile, or null. */
+    public Cave caveAt(int sx, int sy, int tx, int ty) {
+        return caves.get(packCave(sx, sy, tx, ty));
+    }
+
+    /** The caves map (live; the generator fills it before validation). */
+    public Map<Integer, Cave> caves() {
+        return caves;
+    }
+
+    /** The Old woman's Cave screen (same layout in every world; holds nothing in V1). */
     public Screen cave() {
-        return cave;
+        if (secretTree == null || secretTree.sx() < 0) {
+            return null;
+        }
+        Cave c = caves.get(packCave(secretTree.sx(), secretTree.sy(), secretTree.tx(), secretTree.ty()));
+        return c == null ? null : c.room();
     }
 
     /** The Cave walked as terrain (the stairs tile is walkable, the rock is not). */
     public Terrain caveTerrain() {
-        return (sx, sy, tx, ty) -> tx >= 0 && tx < SCREEN_W && ty >= 0 && ty < SCREEN_H && cave.get(tx, ty).walkable;
+        Screen room = cave();
+        return (sx, sy, tx, ty) -> tx >= 0 && tx < SCREEN_W && ty >= 0 && ty < SCREEN_H
+                && room.get(tx, ty).walkable;
     }
 
     /** The seed the player entered (or the run's random seed). */

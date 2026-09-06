@@ -59,7 +59,8 @@ public final class Sim {
     private Phase phase = Phase.PLAYING;
     private int magic = World.MAX_MAGIC; // Light casts left; a death never refills it
     private boolean secretRevealed = false;
-    private boolean inCave = false;
+    /** The cave Link currently stands in, or null on the overworld. */
+    private Cave cave = null;
     private float lightFxTimer = 0; // Light beam still visible while > 0
     private Link.Dir lightFxFacing = Link.Dir.UP;
     private float swordTimer = 0; // time until the next swing is allowed
@@ -87,10 +88,16 @@ public final class Sim {
         this.link = new Link(save.sx(), save.sy(), save.tx(), save.ty());
         this.link.facing = save.facing();
         this.magic = save.magic();
-        this.inCave = save.inCave();
         if (save.secretRevealed()) {
             world.revealSecretStairs();
             this.secretRevealed = true;
+        }
+        // A v2 save in the Cave can only mean the secret cave; v3 stores its key.
+        if (save.caveKey() == SaveState.CAVE_SECRET_V2) {
+            this.cave = world.caveAt(world.secretTree().sx(), world.secretTree().sy(),
+                    world.secretTree().tx(), world.secretTree().ty());
+        } else if (save.caveKey() >= 0) {
+            this.cave = world.caves().get(save.caveKey());
         }
         placeScreenEnemies();
     }
@@ -98,7 +105,8 @@ public final class Sim {
     /** Snapshot of the current persistent state (seed + position + run progress). */
     public SaveState saveState() {
         return new SaveState(world.seed(), link.sx, link.sy, link.tx, link.ty, link.facing,
-                magic, secretRevealed, inCave);
+                magic, secretRevealed, cave == null ? SaveState.NO_CAVE : World.packCave(
+                        cave.entry().sx(), cave.entry().sy(), cave.entry().tx(), cave.entry().ty()));
     }
 
     /**
@@ -159,7 +167,7 @@ public final class Sim {
         if (swing) {
             swing();
         }
-        if (enemyScreenKey != screenKey(link.sx, link.sy)) {
+        if (!inCave() && enemyScreenKey != screenKey(link.sx, link.sy)) {
             placeScreenEnemies(); // leaving and returning respawns the tiles, jittered, in clouds
             enemyTimer = 0;
             projectileTimer = 0;
@@ -227,7 +235,7 @@ public final class Sim {
         magic -= 1;
         lightFxTimer = LIGHT_FX_DURATION;
         lightFxFacing = link.facing;
-        if (!inCave) {
+        if (!inCave()) {
             for (int i = 1; i <= LIGHT_RANGE; i++) {
                 int tx = link.tx + link.facing.dx * i;
                 int ty = link.ty + link.facing.dy * i;
@@ -259,14 +267,25 @@ public final class Sim {
         }
     }
 
-    /** The world Link currently walks on: the overworld, or the Cave. */
+    /** The world Link currently walks on: the overworld, or the current cave room. */
     private Terrain terrain() {
-        return inCave ? world.caveTerrain() : world;
+        return inCave() ? caveRoomTerrain() : world;
     }
 
-    /** True while Link stands in the Old woman's Cave. */
+    private Terrain caveRoomTerrain() {
+        Screen room = cave.room();
+        return (sx, sy, tx, ty) -> tx >= 0 && tx < World.SCREEN_W && ty >= 0 && ty < World.SCREEN_H
+                && room.get(tx, ty).walkable;
+    }
+
+    /** True while Link stands in any cave. */
     public boolean inCave() {
-        return inCave;
+        return cave != null;
+    }
+
+    /** The cave Link stands in, or null. */
+    public Cave currentCave() {
+        return cave;
     }
 
     public boolean secretRevealed() {
@@ -275,31 +294,38 @@ public final class Sim {
 
     /** The stairs toggle: standing on a STAIRS tile after a step moves Link through it. */
     private void useStairsIfStandingOnThem() {
-        if (inCave) {
-            if (world.cave().get(link.tx, link.ty) == Tile.STAIRS) {
+        if (inCave()) {
+            if (cave.room().get(link.tx, link.ty) == Tile.STAIRS) {
                 leaveCave();
             }
-        } else if (world.screen(link.sx, link.sy).get(link.tx, link.ty) == Tile.STAIRS) {
-            enterCave();
+        } else {
+            Cave c = world.caveAt(link.sx, link.sy, link.tx, link.ty);
+            if (c != null && world.screen(link.sx, link.sy).get(link.tx, link.ty) == Tile.STAIRS) {
+                enterCave(c);
+            }
         }
     }
 
-    private void enterCave() {
-        inCave = true;
-        link.sx = world.secretTree().sx();
-        link.sy = world.secretTree().sy();
-        link.tx = World.CAVE_ENTRY_TX;
-        link.ty = World.CAVE_ENTRY_TY;
+    /**
+     * Into a cave room: Link appears at its entry tile, facing back toward the
+     * exit stairs so one step out returns him the way he came.
+     */
+    private void enterCave(Cave c) {
+        cave = c;
+        link.tx = c.entryTx();
+        link.ty = c.entryTy();
+        link.facing = Link.Dir.DOWN; // the exit stairs are south of the entry tile in every room
         interpolating = false;
-        placeScreenEnemies(); // the Cave is empty; returning re-places the overworld screen
+        placeScreenEnemies(); // returning re-places the overworld screen
         autosave();
     }
 
-    /** Back onto a walkable tile beside the Secret stairs, never on the stairs themselves. */
+    /** Back onto a walkable tile beside the cave's stairs, never on the stairs themselves. */
     private void leaveCave() {
-        inCave = false;
-        int sx = world.secretTree().sx(), sy = world.secretTree().sy();
-        int stx = world.secretTree().tx(), sty = world.secretTree().ty();
+        ScreenPos e = cave.entry();
+        cave = null;
+        int sx = e.sx(), sy = e.sy();
+        int stx = e.tx(), sty = e.ty();
         int bdx = -link.facing.dx, bdy = -link.facing.dy; // back the way Link came, then any side
         for (int[] d : new int[][] { { bdx, bdy }, { 0, -1 }, { 0, 1 }, { 1, 0 }, { -1, 0 } }) {
             int tx = stx + d[0], ty = sty + d[1];
@@ -380,9 +406,13 @@ public final class Sim {
         }
     }
 
-    /** Take 1 Heart, obeying i-frames; 0 Hearts ends the run. The Cave is safe. */
+    /**
+     * Take 1 Heart, obeying i-frames; 0 Hearts ends the run. The Old woman's
+     * Cave is safe; a rock cave guards its Octorock.
+     */
     private void damageLink() {
-        if (invulnTimer > 0 || inCave) {
+        if (invulnTimer > 0 || (inCave() && world.isSecretTree(cave.entry().sx(), cave.entry().sy(),
+                cave.entry().tx(), cave.entry().ty()))) {
             return;
         }
         link.hearts -= 1;
@@ -459,7 +489,7 @@ public final class Sim {
         int dx = Integer.signum(toX - fromX), dy = Integer.signum(toY - fromY);
         int x = fromX + dx, y = fromY + dy;
         while (x != toX || y != toY) {
-            if (!world.walkable(link.sx, link.sy, x, y)) {
+            if (!terrain().walkable(link.sx, link.sy, x, y)) {
                 return false;
             }
             x += dx;
@@ -477,7 +507,7 @@ public final class Sim {
             p.ty += p.dy;
             if (p.tx < 0 || p.tx >= World.SCREEN_W || p.ty < 0 || p.ty >= World.SCREEN_H) {
                 p.alive = false; // off the screen
-            } else if (!world.walkable(link.sx, link.sy, p.tx, p.ty)) {
+            } else if (!terrain().walkable(link.sx, link.sy, p.tx, p.ty)) {
                 p.alive = false; // into an obstacle
             } else if (p.tx == link.tx && p.ty == link.ty) {
                 hitLinkByProjectile(p);
@@ -517,7 +547,7 @@ public final class Sim {
             return false;
         }
         int nx = e.tx + dx, ny = e.ty + dy;
-        if (!world.walkable(link.sx, link.sy, nx, ny) || liveEnemyAtOther(e, nx, ny)) {
+        if (!terrain().walkable(link.sx, link.sy, nx, ny) || liveEnemyAtOther(e, nx, ny)) {
             return false;
         }
         e.tx = nx;
@@ -543,6 +573,19 @@ public final class Sim {
     private void placeScreenEnemies() {
         enemies.clear();
         projectiles.clear();
+        if (inCave()) {
+            // the cave holds at most its one Octorock; it respawns on re-entry
+            EnemySpawn s = cave.enemy();
+            if (s != null) {
+                Enemy e = new Enemy(s.kind(), s.tx(), s.ty(), enemyHp(s.kind()),
+                        (world.usedSeed() ^ World.packCave(cave.entry().sx(), cave.entry().sy(),
+                                cave.entry().tx(), cave.entry().ty())) * 31337L);
+                e.spawning = ENEMY_SPAWN_DURATION;
+                enemies.add(e);
+            }
+            enemyScreenKey = Integer.MIN_VALUE; // leaving the cave re-places the overworld screen
+            return;
+        }
         List<EnemySpawn> placed = world.enemies(link.sx, link.sy);
         int key = screenKey(link.sx, link.sy);
         // visit counter makes every entry's layout different even on revisit
@@ -593,7 +636,7 @@ public final class Sim {
         link.sy = World.SPAWN_SY;
         link.tx = World.SPAWN_TX;
         link.ty = World.SPAWN_TY;
-        inCave = false;
+        cave = null;
         invulnTimer = 0;
         swordTimer = 0;
         swingTimer = 0;

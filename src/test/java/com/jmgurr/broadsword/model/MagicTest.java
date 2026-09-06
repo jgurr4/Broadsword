@@ -233,8 +233,20 @@ class MagicTest {
                         .get(sim.world().secretTree().tx(), sim.world().secretTree().ty()),
                 "the stairs stay revealed in the re-derived world");
         assertTrue(reloaded.inCave());
+        assertEquals(sim.currentCave().entry(), reloaded.currentCave().entry(), "the same cave, from its key");
         assertEquals(World.MAX_MAGIC - 2, s.magic(), "burn + one cast");
         assertEquals(s.magic(), reloaded.magic(), "and Magic stays spent after reload");
+    }
+
+    @Test
+    void v2SavesLoadWithTheSecretCaveFlag() {
+        String v2 = "version=2\nseed=9\nlink=20,5,8,5\nfacing=DOWN\nmagic=3\nsecret=1\ncave=1\n";
+        Optional<SaveState> s = SaveState.parse(v2);
+        assertTrue(s.isPresent());
+        assertEquals(SaveState.CAVE_SECRET_V2, s.get().caveKey());
+        Sim reloaded = new Sim(s.get());
+        assertTrue(reloaded.inCave());
+        assertEquals(reloaded.world().secretTree(), reloaded.currentCave().entry());
     }
 
     @Test
@@ -244,7 +256,7 @@ class MagicTest {
         assertTrue(s.isPresent());
         assertEquals(World.MAX_MAGIC, s.get().magic());
         assertFalse(s.get().secretRevealed());
-        assertFalse(s.get().inCave());
+        assertEquals(SaveState.NO_CAVE, s.get().caveKey());
     }
 
     // ---- generation -----------------------------------------------------------

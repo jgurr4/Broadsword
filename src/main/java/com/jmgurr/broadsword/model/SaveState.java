@@ -8,18 +8,23 @@ import java.util.Optional;
  * re-derives from the seed; killed enemies and uncollected pickups respawn per
  * the save model.
  *
- * Text format, one key=value per line, version 2. Version 1 saves (no magic /
- * secret lines) load as a fresh V1 run at the saved position. No libgdx types:
- * parsing is testable headlessly; file I/O lives in the render layer.
+ * Text format, one key=value per line, version 3. Version 1 saves (no magic /
+ * secret lines) load as a fresh V1 run at the saved position; version 2 saves
+ * store {@code cave=0|1} where the only cave was the secret one. No libgdx
+ * types: parsing is testable headlessly; file I/O lives in the render layer.
  */
 public record SaveState(long seed, int sx, int sy, int tx, int ty, Link.Dir facing,
-        int magic, boolean secretRevealed, boolean inCave) {
-    public static final int VERSION = 2;
+        int magic, boolean secretRevealed, int caveKey) {
+    /** {@code caveKey} values: -1 on the overworld; v2's "in the secret cave" marker. */
+    public static final int NO_CAVE = -1;
+    public static final int CAVE_SECRET_V2 = -2;
+    public static final int VERSION = 3;
     static final int VERSION_V1 = 1;
+    static final int VERSION_V2 = 2;
 
     /** A new run: full Magic, the Secret still hidden, Link on the overworld. */
     public SaveState(long seed, int sx, int sy, int tx, int ty, Link.Dir facing) {
-        this(seed, sx, sy, tx, ty, facing, World.MAX_MAGIC, false, false);
+        this(seed, sx, sy, tx, ty, facing, World.MAX_MAGIC, false, NO_CAVE);
     }
 
     public String format() {
@@ -29,7 +34,7 @@ public record SaveState(long seed, int sx, int sy, int tx, int ty, Link.Dir faci
                 + "facing=" + facing.name() + "\n"
                 + "magic=" + magic + "\n"
                 + "secret=" + (secretRevealed ? 1 : 0) + "\n"
-                + "cave=" + (inCave ? 1 : 0) + "\n";
+                + "cave=" + caveKey + "\n";
     }
 
     /** Parse a save file. Any deviation (bad version, bad numbers, out-of-world position) is corrupt. */
@@ -42,7 +47,8 @@ public record SaveState(long seed, int sx, int sy, int tx, int ty, Link.Dir faci
         int[] link = null;
         Link.Dir facing = null;
         Integer magic = null;
-        Boolean secret = null, cave = null;
+        Boolean secret = null;
+        Integer cave = null;
         for (String line : text.split("\\R")) {
             int eq = line.indexOf('=');
             if (eq < 0) {
@@ -67,7 +73,7 @@ public record SaveState(long seed, int sx, int sy, int tx, int ty, Link.Dir faci
                     case "facing" -> facing = Link.Dir.valueOf(value);
                     case "magic" -> magic = Integer.parseInt(value);
                     case "secret" -> secret = flag(value);
-                    case "cave" -> cave = flag(value);
+                    case "cave" -> cave = Integer.parseInt(value);
                     default -> {
                     }
                 }
@@ -78,7 +84,7 @@ public record SaveState(long seed, int sx, int sy, int tx, int ty, Link.Dir faci
         if (version == null || seed == null || link == null || facing == null) {
             return Optional.empty();
         }
-        boolean known = version == VERSION || version == VERSION_V1;
+        boolean known = version == VERSION || version == VERSION_V2 || version == VERSION_V1;
         if (!known || !World.inWorld(link[0], link[1])
                 || link[2] < 0 || link[2] >= World.SCREEN_W
                 || link[3] < 0 || link[3] >= World.SCREEN_H) {
@@ -89,8 +95,19 @@ public record SaveState(long seed, int sx, int sy, int tx, int ty, Link.Dir faci
         if (magicLeft < 0 || magicLeft > World.MAX_MAGIC) {
             return Optional.empty();
         }
+        // v2 stored a boolean: in a cave meant in the secret cave; v3 stores its key.
+        int caveAt = cave == null ? NO_CAVE
+                : version == VERSION_V2 ? (cave == 1 ? CAVE_SECRET_V2 : NO_CAVE)
+                : cave;
+        if (caveAt != NO_CAVE && caveAt != CAVE_SECRET_V2 && (caveAt < 0 || caveAt >= caveKeySpace())) {
+            return Optional.empty();
+        }
         return Optional.of(new SaveState(seed, link[0], link[1], link[2], link[3], facing,
-                magicLeft, secret != null && secret, cave != null && cave));
+                magicLeft, secret != null && secret, caveAt));
+    }
+
+    private static int caveKeySpace() {
+        return World.WORLD_W * World.SCREEN_W * World.WORLD_H * World.SCREEN_H;
     }
 
     private static Boolean flag(String value) {

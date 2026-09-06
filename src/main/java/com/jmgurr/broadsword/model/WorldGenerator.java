@@ -4,6 +4,7 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
 import java.util.EnumMap;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
@@ -137,6 +138,9 @@ public final class WorldGenerator {
         }
         markFlammableTrees(screens, usedSeed);
 
+        Map<Integer, Cave> caves = new HashMap<>();
+        carveRockCaves(screens, archetypes, usedSeed, caves);
+
         @SuppressWarnings("unchecked")
         List<EnemySpawn>[] enemies = new List[World.WORLD_W * World.WORLD_H];
         if (entrance != null) {
@@ -144,7 +148,69 @@ public final class WorldGenerator {
         }
         ScreenPos secretTree = chooseSecretTree(screens, usedSeed);
         return new World(seed, usedSeed, attempt, screens, archetypes, tiers,
-                entrance == null ? new ScreenPos(-1, -1, -1, -1) : entrance, landmarks, enemies, secretTree);
+                entrance == null ? new ScreenPos(-1, -1, -1, -1) : entrance, landmarks, enemies, secretTree, caves);
+    }
+
+    /** Fraction of Rockfield/Mountain screens that hold a cave. Tunable. */
+    static final double CAVE_CHANCE = 0.5;
+    /** Chance that a carved cave holds one Octorock. */
+    static final double CAVE_OCTOROCK_CHANCE = 0.5;
+
+    /**
+     * Rock-formation caves: on CAVE_CHANCE of the Rockfield and Mountain
+     * screens, carve a hole (STAIRS) in one rock tile that touches the walkable
+     * lane, with an off-grid side room behind it. Interior tiles only, so no
+     * screen border changes walkability; the lane neighbour guarantees the hole
+     * is reachable, which {@link WorldGenerator#cavesArePlaced} then verifies.
+     * Deterministic in the used seed.
+     */
+    static void carveRockCaves(Screen[][] screens, Archetype[][] archetypes, long usedSeed,
+            Map<Integer, Cave> caves) {
+        Random rng = new Random(usedSeed ^ 0xCA4E5L);
+        for (int sy = 0; sy < World.WORLD_H; sy++) {
+            for (int sx = 0; sx < World.WORLD_W; sx++) {
+                if (archetypes[sx][sy] != Archetype.ROCKFIELD && archetypes[sx][sy] != Archetype.MOUNTAIN) {
+                    continue; // the roll is only made on rock screens, so "50% of rock screens" means 50%
+                }
+                if (rng.nextDouble() >= CAVE_CHANCE) {
+                    continue;
+                }
+                carveOne(screens, caves, sx, sy, rng);
+            }
+        }
+    }
+
+    /** One screen's carve attempt: first rock tile (scan order, interior only) with a walkable neighbour. */
+    private static boolean carveOne(Screen[][] screens, Map<Integer, Cave> caves, int sx, int sy, Random rng) {
+        Screen s = screens[sx][sy];
+        for (int y = 1; y < World.SCREEN_H - 1; y++) {
+            for (int x = 1; x < World.SCREEN_W - 1; x++) {
+                if (s.get(x, y) != Tile.ROCK || !laneNeighbourWalkable(s, x, y)) {
+                    continue;
+                }
+                s.set(x, y, Tile.STAIRS);
+                Screen room = World.buildRockCaveRoom();
+                EnemySpawn guard = rng.nextDouble() < CAVE_OCTOROCK_CHANCE
+                        ? new EnemySpawn(EnemyKind.OCTOROCK, World.ROCK_CAVE_ENTRY_TX - 1,
+                                World.ROCK_CAVE_ENTRY_TY + 1)
+                        : null;
+                caves.put(World.packCave(sx, sy, x, y),
+                        new Cave(new ScreenPos(sx, sy, x, y), room, World.ROCK_CAVE_ENTRY_TX,
+                                World.ROCK_CAVE_ENTRY_TY, guard));
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Any of the four neighbours walkable: Link can be standing there and walk in. */
+    private static boolean laneNeighbourWalkable(Screen s, int x, int y) {
+        for (int d = 0; d < 4; d++) {
+            if (s.get(x + DDX[d], y + DDY[d]).walkable) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** Fraction of the island's trees that Light can burn down. */
@@ -844,7 +910,38 @@ public final class WorldGenerator {
     /** Post-conditions every generated world must satisfy. */
     static boolean valid(World w) {
         return regionArchetypesAreSized(w) && screenBordersMatch(w) && entranceIsPlaced(w) && spawnIsWalkable(w)
-                && allScreensReachable(w) && enemiesAreLegal(w);
+                && allScreensReachable(w) && enemiesAreLegal(w) && cavesArePlaced(w);
+    }
+
+    /**
+     * Cave entrances participate in connectivity: each is a STAIRS tile with a
+     * walkable neighbour on a reachable screen, so the flood fill above can
+     * stand Link next to it, and no cave shares an entrance tile.
+     */
+    static boolean cavesArePlaced(World w) {
+        for (Cave c : w.caves().values()) {
+            ScreenPos e = c.entry();
+            Tile t = w.screen(e.sx(), e.sy()).get(e.tx(), e.ty());
+            // The Secret cave's entrance is the Secret tree until it burns: sealed, not carved.
+            boolean sealed = w.isSecretTree(e.sx(), e.sy(), e.tx(), e.ty()) && t != Tile.STAIRS;
+            if (t != Tile.STAIRS && !sealed) {
+                return false;
+            }
+            if (sealed) {
+                continue;
+            }
+            boolean reachable = false;
+            for (int d = 0; d < 4; d++) {
+                int nx = e.tx() + DDX[d], ny = e.ty() + DDY[d];
+                if (w.walkable(e.sx(), e.sy(), nx, ny)) {
+                    reachable = true;
+                }
+            }
+            if (!reachable) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**

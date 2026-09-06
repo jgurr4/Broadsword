@@ -107,7 +107,7 @@ public class GameScreen implements Screen {
         }
         for (int y = 0; y < World.SCREEN_H; y++) {
             for (int x = 0; x < World.SCREEN_W; x++) {
-                Tile t = sim.inCave() ? sim.world().cave().get(x, y)
+                Tile t = sim.inCave() ? sim.currentCave().room().get(x, y)
                         : sim.world().screen(link.sx, link.sy).get(x, y);
                 b.draw(tileRegions[t.ordinal()], x * GameConfig.TILE, (World.SCREEN_H - 1 - y) * GameConfig.TILE);
             }
