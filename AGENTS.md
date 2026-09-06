@@ -20,3 +20,5 @@ Never commit any change to the repo without human approval first. Have a commit 
 
 Always have a `progress.md` file in the project (not in the `raw` or `wiki` folder) which explains the status of ingested raw files and how much   is left to be done. Update this every time you ingest more raw files into the wiki using the wiki-ingest skill
 
+Do not add index.md to .gitignore
+
