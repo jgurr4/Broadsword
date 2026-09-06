@@ -14,9 +14,9 @@ public final class TextureGen {
     private TextureGen() {
     }
 
-    /** Tile strip, one cell per Tile ordinal: GRASS DIRT SAND ROCK TREE TOMBSTONE WATER ENTRANCE. */
+    /** Tile strip, one cell per Tile ordinal: GRASS DIRT SAND ROCK TREE TOMBSTONE WATER ENTRANCE FLAMMABLE_TREE STAIRS. */
     public static Texture tiles() {
-        int w = 8 * GameConfig.TILE;
+        int w = 10 * GameConfig.TILE;
         Pixmap pm = new Pixmap(w, GameConfig.TILE, Pixmap.Format.RGBA8888);
         pm.setColor(Color.BLACK);
         pm.fill();
@@ -34,7 +34,13 @@ public final class TextureGen {
                     case 4 -> pm.setColor(ly >= 11 ? new Color(0.4f, 0.28f, 0.15f, 1) : n % 3 == 0 ? new Color(0.1f, 0.4f, 0.15f, 1) : new Color(0.15f, 0.45f, 0.2f, 1));
                     case 5 -> pm.setColor(ly >= 3 && lx >= 4 && lx <= 10 && (ly >= 5 || Math.abs(lx - 7) + ly <= 7) ? new Color(0.6f, 0.6f, 0.65f, 1) : new Color(0.25f, 0.5f, 0.2f, 1));
                     case 6 -> pm.setColor(n == 0 ? new Color(0.25f, 0.45f, 0.8f, 1) : new Color(0.2f, 0.4f, 0.75f, 1));
-                    default -> pm.setColor((ly >= 3 && lx >= 4 && lx <= 10) ? new Color(0.5f, 0.3f, 0.15f, 1) : new Color(0.12f, 0.1f, 0.14f, 1));
+                    case 7 -> pm.setColor((ly >= 3 && lx >= 4 && lx <= 10) ? new Color(0.5f, 0.3f, 0.15f, 1) : new Color(0.12f, 0.1f, 0.14f, 1));
+                    // same tree, dry autumn colours: reads as "this one could burn"
+                    case 8 -> pm.setColor(ly >= 11 ? new Color(0.4f, 0.28f, 0.15f, 1) : n % 3 == 0 ? new Color(0.5f, 0.34f, 0.12f, 1) : new Color(0.62f, 0.45f, 0.16f, 1));
+                    // a lit doorway in the ground: dark hole with steps down
+                    default -> pm.setColor(ly >= 8 && lx >= 3 && lx <= 12
+                            ? (lx + ly) % 4 < 2 ? new Color(0.75f, 0.7f, 0.6f, 1) : new Color(0.2f, 0.17f, 0.2f, 1)
+                            : new Color(0.3f, 0.3f, 0.32f, 1));
                 }
                 pm.drawPixel(x, y);
             }

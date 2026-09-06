@@ -44,7 +44,7 @@ public class Link {
      *
      * @return true if Link moved
      */
-    public boolean step(World w, Dir d) {
+    public boolean step(Terrain w, Dir d) {
         facing = d;
         int nsx = sx, nsy = sy;
         int nx = tx + d.dx, ny = ty + d.dy;

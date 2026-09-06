@@ -45,7 +45,9 @@ public class GameScreen implements Screen {
             TextureGen.region(tiles, 4),
             TextureGen.region(tiles, 5),
             TextureGen.region(tiles, 6),
-            TextureGen.region(tiles, 7)
+            TextureGen.region(tiles, 7),
+            TextureGen.region(tiles, 8),
+            TextureGen.region(tiles, 9)
         };
     }
 
@@ -53,6 +55,9 @@ public class GameScreen implements Screen {
     public void render(float delta) {
         desired = readInput();
         boolean swing = Gdx.input.isKeyJustPressed(Input.Keys.SPACE);
+        if (Gdx.input.isKeyJustPressed(Input.Keys.F)) {
+            sim.castLight();
+        }
         if (sim.phase() == Sim.Phase.GAME_OVER && Gdx.input.isKeyJustPressed(Input.Keys.R)) {
             sim.respawn();
         }
@@ -102,9 +107,22 @@ public class GameScreen implements Screen {
         }
         for (int y = 0; y < World.SCREEN_H; y++) {
             for (int x = 0; x < World.SCREEN_W; x++) {
-                Tile t = sim.world().screen(link.sx, link.sy).get(x, y);
-                int cell = t.ordinal();
-                b.draw(tileRegions[cell], x * GameConfig.TILE, (World.SCREEN_H - 1 - y) * GameConfig.TILE);
+                Tile t = sim.inCave() ? sim.world().cave().get(x, y)
+                        : sim.world().screen(link.sx, link.sy).get(x, y);
+                b.draw(tileRegions[t.ordinal()], x * GameConfig.TILE, (World.SCREEN_H - 1 - y) * GameConfig.TILE);
+            }
+        }
+        // Light beam: two tiles straight ahead of the facing it was cast along
+        if (sim.lightVisible()) {
+            Link.Dir lf = sim.lightFxFacing();
+            for (int i = 1; i <= Sim.LIGHT_RANGE; i++) {
+                int lx = link.tx + lf.dx * i, ly = link.ty + lf.dy * i;
+                if (lx < 0 || lx >= World.SCREEN_W || ly < 0 || ly >= World.SCREEN_H) {
+                    continue;
+                }
+                b.setColor(1, 1, 0.7f, 0.5f);
+                b.draw(TextureGen.region(ui, 2), lx * GameConfig.TILE, (World.SCREEN_H - 1 - ly) * GameConfig.TILE);
+                b.setColor(1, 1, 1, 1);
             }
         }
         // enemies: every live enemy of the current screen, in a distinct colour
@@ -168,9 +186,13 @@ public class GameScreen implements Screen {
             drawUiCell(b, 0, 3 + i * 12, GameConfig.LOGICAL_H - 19,
                     i < link.hearts ? com.badlogic.gdx.graphics.Color.WHITE : new com.badlogic.gdx.graphics.Color(0.3f, 0.3f, 0.3f, 1f));
         }
+        // Magic pips: bright = cast left, dim = spent (a death never refills them)
         for (int i = 0; i < GameConfig.MAX_MAGIC; i++) {
-            b.draw(TextureGen.region(ui, 1), 3 + i * 12, GameConfig.LOGICAL_H - 38);
+            drawUiCell(b, 1, 3 + i * 12, GameConfig.LOGICAL_H - 38,
+                    i < sim.magic() ? com.badlogic.gdx.graphics.Color.WHITE
+                            : new com.badlogic.gdx.graphics.Color(0.3f, 0.3f, 0.3f, 1f));
         }
+
         if (sim.phase() == Sim.Phase.GAME_OVER) {
             layout.setText(font, "GAME OVER");
             font.draw(b, "GAME OVER", (GameConfig.LOGICAL_W - layout.width) / 2, GameConfig.LOGICAL_H / 2f + 6);

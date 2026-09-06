@@ -7,7 +7,7 @@ import java.util.Map;
 import java.util.Random;
 
 /** The overworld: a 40x15 grid of screens (600 screens), fully derived from one seed. */
-public class World {
+public class World implements Terrain {
     public static final int WORLD_W = 40;
     public static final int WORLD_H = 15;
     public static final int SCREEN_W = 16;
@@ -15,6 +15,12 @@ public class World {
 
     /** Link's starting (and maximum, in V1) Hearts. */
     public static final int MAX_HEARTS = 3;
+
+    /** Light casts per run. Nothing refills Magic in V1. */
+    public static final int MAX_MAGIC = 4;
+
+    /** Cave entry tile (below it sits the exit stairs, in the wall). */
+    public static final int CAVE_ENTRY_TX = 8, CAVE_ENTRY_TY = 1;
 
     public static final int SPAWN_SX = 20;
     public static final int SPAWN_SY = 5;
@@ -33,12 +39,15 @@ public class World {
     private final Archetype[][] archetypes;
     private final int[][] tiers;
     private final ScreenPos entrance;
+    private final ScreenPos secretTree;
     private final Map<Landmark, ScreenPos> landmarks;
     private final List<EnemySpawn>[] enemiesByScreen;
+    private final Screen cave;
 
     @SuppressWarnings("unchecked")
     World(long seed, long usedSeed, int attempts, Screen[][] screens, Archetype[][] archetypes, int[][] tiers,
-            ScreenPos entrance, Map<Landmark, ScreenPos> landmarks, List<EnemySpawn>[] enemiesByScreen) {
+            ScreenPos entrance, Map<Landmark, ScreenPos> landmarks, List<EnemySpawn>[] enemiesByScreen,
+            ScreenPos secretTree) {
         this.seed = seed;
         this.usedSeed = usedSeed;
         this.attempts = attempts;
@@ -46,8 +55,35 @@ public class World {
         this.archetypes = archetypes;
         this.tiers = tiers;
         this.entrance = entrance;
+        this.secretTree = secretTree;
         this.landmarks = Collections.unmodifiableMap(new EnumMap<>(landmarks));
         this.enemiesByScreen = enemiesByScreen;
+        this.cave = buildCave();
+    }
+
+    /** The Old woman's Cave: a walled off-grid room with the return stairs in the south wall. */
+    private static Screen buildCave() {
+        Screen s = new Screen();
+        for (int x = 0; x < World.SCREEN_W; x++) {
+            s.set(x, 0, Tile.ROCK);
+            s.set(x, World.SCREEN_H - 1, Tile.ROCK);
+        }
+        for (int y = 0; y < World.SCREEN_H; y++) {
+            s.set(0, y, Tile.ROCK);
+            s.set(World.SCREEN_W - 1, y, Tile.ROCK);
+        }
+        s.set(World.CAVE_ENTRY_TX, World.SCREEN_H - 1, Tile.STAIRS);
+        return s;
+    }
+
+    /** The Cave screen (same layout in every world; holds nothing in V1). */
+    public Screen cave() {
+        return cave;
+    }
+
+    /** The Cave walked as terrain (the stairs tile is walkable, the rock is not). */
+    public Terrain caveTerrain() {
+        return (sx, sy, tx, ty) -> tx >= 0 && tx < SCREEN_W && ty >= 0 && ty < SCREEN_H && cave.get(tx, ty).walkable;
     }
 
     /** The seed the player entered (or the run's random seed). */
@@ -82,11 +118,26 @@ public class World {
         return screens[sx][sy];
     }
 
+    @Override
     public boolean walkable(int sx, int sy, int tx, int ty) {
         if (!inWorld(sx, sy) || tx < 0 || tx >= SCREEN_W || ty < 0 || ty >= SCREEN_H) {
             return false;
         }
         return screens[sx][sy].get(tx, ty).walkable;
+    }
+
+    /** The one Secret tree's tile (once burned, this tile holds the Secret stairs). */
+    public ScreenPos secretTree() {
+        return secretTree;
+    }
+
+    public boolean isSecretTree(int sx, int sy, int tx, int ty) {
+        return secretTree.sx() == sx && secretTree.sy() == sy && secretTree.tx() == tx && secretTree.ty() == ty;
+    }
+
+    /** Turn the Secret tree's tile into the Secret stairs (the tree is already gone). */
+    public void revealSecretStairs() {
+        screens[secretTree.sx()][secretTree.sy()].set(secretTree.tx(), secretTree.ty(), Tile.STAIRS);
     }
 
     /** The screen's terrain archetype. */

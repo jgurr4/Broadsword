@@ -37,6 +37,10 @@ public final class Sim {
     public static final float PROJECTILE_STEP_INTERVAL = 0.1f;
     /** Seconds an enemy spends as a spawning cloud before it materialises. */
     public static final float ENEMY_SPAWN_DURATION = 2.0f;
+    /** Light: tiles straight ahead of Link, obstacles and enemies included. */
+    public static final int LIGHT_RANGE = 2;
+    /** Seconds the Light beam stays visible. */
+    public static final float LIGHT_FX_DURATION = 0.25f;
 
     public enum Phase {
         PLAYING, GAME_OVER
@@ -53,6 +57,11 @@ public final class Sim {
     private Link.Dir interpolatingDir = null; // dir of the in-flight step
 
     private Phase phase = Phase.PLAYING;
+    private int magic = World.MAX_MAGIC; // Light casts left; a death never refills it
+    private boolean secretRevealed = false;
+    private boolean inCave = false;
+    private float lightFxTimer = 0; // Light beam still visible while > 0
+    private Link.Dir lightFxFacing = Link.Dir.UP;
     private float swordTimer = 0; // time until the next swing is allowed
     private float swingTimer = 0; // blade still out while > 0
     private float invulnTimer = 0; // i-frames remaining
@@ -77,12 +86,19 @@ public final class Sim {
         this.world = WorldGenerator.generate(save.seed());
         this.link = new Link(save.sx(), save.sy(), save.tx(), save.ty());
         this.link.facing = save.facing();
+        this.magic = save.magic();
+        this.inCave = save.inCave();
+        if (save.secretRevealed()) {
+            world.revealSecretStairs();
+            this.secretRevealed = true;
+        }
         placeScreenEnemies();
     }
 
-    /** Snapshot of the current persistent state (seed + position). */
+    /** Snapshot of the current persistent state (seed + position + run progress). */
     public SaveState saveState() {
-        return new SaveState(world.seed(), link.sx, link.sy, link.tx, link.ty, link.facing);
+        return new SaveState(world.seed(), link.sx, link.sy, link.tx, link.ty, link.facing,
+                magic, secretRevealed, inCave);
     }
 
     /**
@@ -114,7 +130,7 @@ public final class Sim {
         }
         if (desired != null && !interpolating && stepTimer >= STEP_INTERVAL) {
             int psx = link.sx, psy = link.sy;
-            if (link.step(world, desired)) {
+            if (link.step(terrain(), desired)) {
                 if (link.sx != psx || link.sy != psy) {
                     // crossed a screen edge: no slide animation across the seam,
                     // and the run autosaves
@@ -126,12 +142,14 @@ public final class Sim {
                     interpProgress = 0;
                 }
                 stepTimer = 0;
+                useStairsIfStandingOnThem();
             }
         }
         stepTimer += delta;
         swordTimer = Math.max(0, swordTimer - delta);
         swingTimer = Math.max(0, swingTimer - delta);
         invulnTimer = Math.max(0, invulnTimer - delta);
+        lightFxTimer = Math.max(0, lightFxTimer - delta);
         if (interpolating) {
             interpProgress = Math.min(1, interpProgress + delta / STEP_INTERVAL);
             if (interpProgress >= 1) {
@@ -139,7 +157,7 @@ public final class Sim {
             }
         }
         if (swing) {
-            trySwing();
+            swing();
         }
         if (enemyScreenKey != screenKey(link.sx, link.sy)) {
             placeScreenEnemies(); // leaving and returning respawns the tiles, jittered, in clouds
@@ -174,25 +192,150 @@ public final class Sim {
      * back one tile unless the target tile is blocked.
      */
     public void swing() {
-        trySwing();
+        if (swordTimer > 0) {
+            return; // cooldown not expired
+        }
+        hitWith(link.facing, true);
     }
 
-    private void trySwing() {
-        if (phase != Phase.PLAYING || swordTimer > 0) {
-            return;
+    // --- Light spell ---------------------------------------------------------
+
+    /** Magic casts left. Spent Magic never comes back: no refill on death or reload. */
+    public int magic() {
+        return magic;
+    }
+
+    /** True while the Light beam is visible (renderer draws it along the saved facing). */
+    public boolean lightVisible() {
+        return lightFxTimer > 0;
+    }
+
+    public Link.Dir lightFxFacing() {
+        return lightFxFacing;
+    }
+
+    /**
+     * Cast Light: one Magic, a beam straight ahead of Link for {@link #LIGHT_RANGE}
+     * tiles. It passes through everything: enemies in the beam take 1 damage and
+     * one tile of knockback, flammable trees burn away, and burning the Secret
+     * tree reveals the stairs. Returns false (no Magic spent) when out of Magic.
+     */
+    public boolean castLight() {
+        if (phase != Phase.PLAYING || magic <= 0) {
+            return false;
         }
-        swordTimer = SWORD_COOLDOWN;
-        swingTimer = SWORD_SWING_DURATION;
-        int hx = link.tx + link.facing.dx;
-        int hy = link.ty + link.facing.dy;
-        for (Enemy e : enemies) {
-            if (e.alive && e.spawning <= 0 && e.tx == hx && e.ty == hy) {
-                hit(e);
+        magic -= 1;
+        lightFxTimer = LIGHT_FX_DURATION;
+        lightFxFacing = link.facing;
+        if (!inCave) {
+            for (int i = 1; i <= LIGHT_RANGE; i++) {
+                int tx = link.tx + link.facing.dx * i;
+                int ty = link.ty + link.facing.dy * i;
+                if (tx < 0 || tx >= World.SCREEN_W || ty < 0 || ty >= World.SCREEN_H) {
+                    continue; // the beam leaves the screen; the next screen is not simulated
+                }
+                Tile tile = world.screen(link.sx, link.sy).get(tx, ty);
+                if (tile == Tile.FLAMMABLE_TREE) {
+                    burn(link.sx, link.sy, tx, ty);
+                }
+                for (Enemy e : enemies) {
+                    if (e.alive && e.spawning <= 0 && e.tx == tx && e.ty == ty) {
+                        hit(e, link.facing); // knocked back along the beam
+                    }
+                }
+            }
+        }
+        autosave(); // Magic is persistent state
+        return true;
+    }
+
+    /** Burn one flammable tree; the Secret tree leaves stairs in its place. */
+    private void burn(int sx, int sy, int tx, int ty) {
+        if (world.isSecretTree(sx, sy, tx, ty)) {
+            world.revealSecretStairs();
+            secretRevealed = true;
+        } else {
+            world.screen(sx, sy).set(tx, ty, Tile.GRASS);
+        }
+    }
+
+    /** The world Link currently walks on: the overworld, or the Cave. */
+    private Terrain terrain() {
+        return inCave ? world.caveTerrain() : world;
+    }
+
+    /** True while Link stands in the Old woman's Cave. */
+    public boolean inCave() {
+        return inCave;
+    }
+
+    public boolean secretRevealed() {
+        return secretRevealed;
+    }
+
+    /** The stairs toggle: standing on a STAIRS tile after a step moves Link through it. */
+    private void useStairsIfStandingOnThem() {
+        if (inCave) {
+            if (world.cave().get(link.tx, link.ty) == Tile.STAIRS) {
+                leaveCave();
+            }
+        } else if (world.screen(link.sx, link.sy).get(link.tx, link.ty) == Tile.STAIRS) {
+            enterCave();
+        }
+    }
+
+    private void enterCave() {
+        inCave = true;
+        link.sx = world.secretTree().sx();
+        link.sy = world.secretTree().sy();
+        link.tx = World.CAVE_ENTRY_TX;
+        link.ty = World.CAVE_ENTRY_TY;
+        interpolating = false;
+        placeScreenEnemies(); // the Cave is empty; returning re-places the overworld screen
+        autosave();
+    }
+
+    /** Back onto a walkable tile beside the Secret stairs, never on the stairs themselves. */
+    private void leaveCave() {
+        inCave = false;
+        int sx = world.secretTree().sx(), sy = world.secretTree().sy();
+        int stx = world.secretTree().tx(), sty = world.secretTree().ty();
+        int bdx = -link.facing.dx, bdy = -link.facing.dy; // back the way Link came, then any side
+        for (int[] d : new int[][] { { bdx, bdy }, { 0, -1 }, { 0, 1 }, { 1, 0 }, { -1, 0 } }) {
+            int tx = stx + d[0], ty = sty + d[1];
+            if (world.walkable(sx, sy, tx, ty)) {
+                link.sx = sx;
+                link.sy = sy;
+                link.tx = tx;
+                link.ty = ty;
+                interpolating = false;
+                placeScreenEnemies();
+                autosave();
+                return;
             }
         }
     }
 
-    private void hit(Enemy e) {
+    /** One swing's worth of damage along Link's facing, plus the blade-out window. */
+    private void hitWith(Link.Dir blow, boolean bladeOut) {
+        if (phase != Phase.PLAYING) {
+            return;
+        }
+        if (bladeOut) {
+            swordTimer = SWORD_COOLDOWN;
+            swingTimer = SWORD_SWING_DURATION;
+        }
+        int hx = link.tx + blow.dx;
+        int hy = link.ty + blow.dy;
+        for (Enemy e : enemies) {
+            if (e.alive && e.spawning <= 0 && e.tx == hx && e.ty == hy) {
+                hit(e, blow);
+            }
+        }
+    }
+
+    /** 1 damage away from the blow ({@code blow} = the direction it travels). */
+    private void hit(Enemy e, Link.Dir blow) {
         e.hp -= 1;
         if (e.hp <= 0) {
             e.alive = false;
@@ -200,9 +343,9 @@ public final class Sim {
         }
         e.stunned = true;
         // knockback: one tile directly away from the blow, if the tile is clear
-        int kx = e.tx + link.facing.dx;
-        int ky = e.ty + link.facing.dy;
-        if (world.walkable(link.sx, link.sy, kx, ky) && !liveEnemyAt(kx, ky)) {
+        int kx = e.tx + blow.dx;
+        int ky = e.ty + blow.dy;
+        if (terrain().walkable(link.sx, link.sy, kx, ky) && !liveEnemyAt(kx, ky)) {
             e.tx = kx;
             e.ty = ky;
         }
@@ -237,9 +380,9 @@ public final class Sim {
         }
     }
 
-    /** Take 1 Heart, obeying i-frames; 0 Hearts ends the run. */
+    /** Take 1 Heart, obeying i-frames; 0 Hearts ends the run. The Cave is safe. */
     private void damageLink() {
-        if (invulnTimer > 0) {
+        if (invulnTimer > 0 || inCave) {
             return;
         }
         link.hearts -= 1;
@@ -450,6 +593,7 @@ public final class Sim {
         link.sy = World.SPAWN_SY;
         link.tx = World.SPAWN_TX;
         link.ty = World.SPAWN_TY;
+        inCave = false;
         invulnTimer = 0;
         swordTimer = 0;
         swingTimer = 0;

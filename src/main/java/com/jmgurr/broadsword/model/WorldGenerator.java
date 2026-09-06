@@ -135,14 +135,99 @@ public final class WorldGenerator {
         if (entrance != null) {
             screens[entrance.sx()][entrance.sy()].set(entrance.tx(), entrance.ty(), Tile.ENTRANCE);
         }
+        markFlammableTrees(screens, usedSeed);
 
         @SuppressWarnings("unchecked")
         List<EnemySpawn>[] enemies = new List[World.WORLD_W * World.WORLD_H];
         if (entrance != null) {
             placeEnemies(rng, screens, tiers, landmarks, entrance, enemies);
         }
+        ScreenPos secretTree = chooseSecretTree(screens, usedSeed);
         return new World(seed, usedSeed, attempt, screens, archetypes, tiers,
-                entrance == null ? new ScreenPos(-1, -1, -1, -1) : entrance, landmarks, enemies);
+                entrance == null ? new ScreenPos(-1, -1, -1, -1) : entrance, landmarks, enemies, secretTree);
+    }
+
+    /** Fraction of the island's trees that Light can burn down. */
+    static final double FLAMMABLE_RATE = 0.20;
+
+    /**
+     * Scatter the burnable trees last, after every carve and boundary repair, so no later pass erases them or moves
+     * one onto a fresh opening. Deterministic in the used seed; the spawn screen stays all plain trees, where Link
+     * learns the controls and nothing should look burnable by accident.
+     */
+    static void markFlammableTrees(Screen[][] screens, long usedSeed) {
+        Random rng = new Random(usedSeed ^ 0x5EEDL);
+        for (int sy = 0; sy < World.WORLD_H; sy++) {
+            for (int sx = 0; sx < World.WORLD_W; sx++) {
+                if (sx == World.SPAWN_SX && sy == World.SPAWN_SY) {
+                    continue;
+                }
+                Screen s = screens[sx][sy];
+                for (int y = 0; y < World.SCREEN_H; y++) {
+                    for (int x = 0; x < World.SCREEN_W; x++) {
+                        if (s.get(x, y) == Tile.TREE && rng.nextDouble() < FLAMMABLE_RATE) {
+                            s.set(x, y, Tile.FLAMMABLE_TREE);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /** True when at least one of the four sides of the tile can be stood on. */
+    private static boolean hasWalkableSide(Screen[][] screens, int sx, int sy, int tx, int ty) {
+        for (int[] d : new int[][] { { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 } }) {
+            int cx = tx + d[0], cy = ty + d[1], csx = sx, csy = sy;
+            if (cx < 0) {
+                csx--;
+                cx += World.SCREEN_W;
+            } else if (cx >= World.SCREEN_W) {
+                csx++;
+                cx -= World.SCREEN_W;
+            }
+            if (cy < 0) {
+                csy--;
+                cy += World.SCREEN_H;
+            } else if (cy >= World.SCREEN_H) {
+                csy++;
+                cy -= World.SCREEN_H;
+            }
+            if (World.inWorld(csx, csy) && screens[csx][csy].get(cx, cy).walkable) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * The one Secret tree: a flammable tree 6-15 screens out (never the safe first band, never the far hunting
+     * grounds), with a side Link can stand on to strike it. Deterministic in the used seed.
+     */
+    static ScreenPos chooseSecretTree(Screen[][] screens, long usedSeed) {
+        java.util.List<ScreenPos> band = new java.util.ArrayList<>(), wide = new java.util.ArrayList<>();
+        for (int sy = 0; sy < World.WORLD_H; sy++) {
+            for (int sx = 0; sx < World.WORLD_W; sx++) {
+                Screen s = screens[sx][sy];
+                for (int y = 0; y < World.SCREEN_H; y++) {
+                    for (int x = 0; x < World.SCREEN_W; x++) {
+                        if (s.get(x, y) != Tile.FLAMMABLE_TREE || !hasWalkableSide(screens, sx, sy, x, y)) {
+                            continue;
+                        }
+                        int dist = World.distanceFromSpawn(sx, sy);
+                        if (dist >= 6 && dist <= 15) {
+                            band.add(new ScreenPos(sx, sy, x, y));
+                        } else {
+                            wide.add(new ScreenPos(sx, sy, x, y));
+                        }
+                    }
+                }
+            }
+        }
+        java.util.List<ScreenPos> pool = band.isEmpty() ? wide : band;
+        if (pool.isEmpty()) {
+            throw new IllegalStateException("no reachable flammable tree for seed " + usedSeed);
+        }
+        return pool.get(new Random(usedSeed ^ 0x5EC0L).nextInt(pool.size()));
     }
 
     /**
