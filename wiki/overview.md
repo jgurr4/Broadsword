@@ -11,14 +11,20 @@ updated: 2026-09-05
 
 ## Current Understanding
 
-*No sources ingested yet.* The repo contains 29 Java files under `src/` (a libGDX-style
-2D game: `Main`, `BroadswordGame`, `GameScreen`, `TitleScreen`, plus a `model/` package),
-7 JUnit test classes, and Gradle build files.
+1 of 29 Java files documented. The program boots in two clearly separated layers: a
+nine-line JVM entry point that only configures a desktop window, and a libGDX `Game`
+subclass that owns everything game-shaped. `Main` never mentions the world, the player or
+combat, so the project's structure is already visible from its first file: display setup,
+then game object, then simulation model.
 
 ## Open Questions
 
-*Add questions here as they arise.*
+- Why is the window non-resizable (`setResizable(false)`) — a deliberate constraint so the
+  viewport only has to be configured once, or just a preference?
+- The window is 2160×1350 against a 240×150 logical world (a 9× scale). What drives that
+  ratio, and does it hold on a 1080p screen?
 
 ## Key Entities / Concepts
 
-*Populated as pages are created.*
+- [[file-main-java](pages/file-main-java.md)] — the entry point; window config then handover to `Lwjgl3Application`.
+- [[java-main-method](pages/java-main-method.md)] — why `public static void main(String[] args)` is the start, and why a game loop never lives there.
