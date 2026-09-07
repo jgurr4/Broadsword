@@ -16,7 +16,15 @@ public enum Tile {
     /** Secret stairs revealed by burning the Secret tree; walkable, leads to the Cave. */
     STAIRS(true),
     /** A cave's dark floor: walkable, and the only thing inside the walls. */
-    CAVE_FLOOR(true);
+    CAVE_FLOOR(true),
+    DUNGEON_WALL(false),
+    DUNGEON_FLOOR(true),
+    /** Authored dungeon door; passable, transitions when walked through. */
+    DOOR(true),
+    /** Impassable until a key opens it; open state lives in the run, not the tile. */
+    LOCKED_DOOR(false),
+    /** The always-open door back to the overworld; unique in a dungeon. */
+    DUNGEON_EXIT(true);
 
     public final boolean walkable;
 

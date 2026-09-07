@@ -42,7 +42,7 @@ public class World implements Terrain {
     private final Screen[][] screens;
     private final Archetype[][] archetypes;
     private final int[][] tiers;
-    private final ScreenPos entrance;
+    private ScreenPos entrance;
     private final ScreenPos secretTree;
     private final Map<Landmark, ScreenPos> landmarks;
     /** The one Flute, on a walkable Cemetery tile. */
@@ -218,6 +218,11 @@ public class World implements Terrain {
 
     public boolean isEntrance(int sx, int sy, int tx, int ty) {
         return entrance.sx() == sx && entrance.sy() == sy && entrance.tx() == tx && entrance.ty() == ty;
+    }
+
+    /** Tests place the entrance where the terrain guarantees a walkable approach. */
+    void setEntrance(ScreenPos p) {
+        this.entrance = p;
     }
 
     /** Anchor (north-west) screen of each landmark's 2x2 area. */

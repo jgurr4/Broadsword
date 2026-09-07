@@ -9,10 +9,13 @@ import com.badlogic.gdx.graphics.g2d.GlyphLayout;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 
+import com.jmgurr.broadsword.model.DungeonScreen;
 import com.jmgurr.broadsword.model.Link;
 import com.jmgurr.broadsword.model.Sim;
 import com.jmgurr.broadsword.model.Tile;
 import com.jmgurr.broadsword.model.World;
+
+import java.util.Map;
 
 public class GameScreen implements Screen {
     private final BroadswordGame game;
@@ -21,6 +24,8 @@ public class GameScreen implements Screen {
     private final Texture ui;
     private final Texture sprites;
     private final TextureRegion[] tileRegions;
+    private final TextureRegion keySprite;
+    private final TextureRegion chestSprite;
 
     private final BitmapFont font = new BitmapFont();
     private final GlyphLayout layout = new GlyphLayout();
@@ -39,6 +44,8 @@ public class GameScreen implements Screen {
         // tile strip cells match the Tile enum ordinals
         this.tileRegions = TextureGen.regions(tiles, Tile.values().length)
                 .toArray(new TextureRegion[0]);
+        this.keySprite = TextureGen.region(sprites, TextureGen.SPRITE_KEY);
+        this.chestSprite = TextureGen.region(sprites, TextureGen.SPRITE_CHEST);
     }
 
     @Override
@@ -100,8 +107,20 @@ public class GameScreen implements Screen {
         }
         for (int y = 0; y < World.SCREEN_H; y++) {
             for (int x = 0; x < World.SCREEN_W; x++) {
-                Tile t = sim.inCave() ? sim.currentCave().room().get(x, y)
-                        : sim.world().screen(link.sx, link.sy).get(x, y);
+                Tile t;
+                if (sim.inDungeon()) {
+                    t = sim.dungeonScreen().grid().get(x, y);
+                    // an open lock looks like the open door it became
+                    if (t == Tile.LOCKED_DOOR) {
+                        Map.Entry<Link.Dir, DungeonScreen.Door> d = sim.dungeonScreen().doorAt(x, y);
+                        if (d != null && sim.dungeonRun().isOpen(d.getValue().lockId())) {
+                            t = Tile.DOOR;
+                        }
+                    }
+                } else {
+                    t = sim.inCave() ? sim.currentCave().room().get(x, y)
+                            : sim.world().screen(link.sx, link.sy).get(x, y);
+                }
                 if (sim.inCave() && t == Tile.ROCK) {
                     b.setColor(0.3f, 0.3f, 0.34f, 1f); // cave walls stay dim next to the dark floor
                 }
@@ -128,6 +147,21 @@ public class GameScreen implements Screen {
                         ? new com.badlogic.gdx.graphics.Color(1, 0.4f, 0.4f, 1)
                         : com.badlogic.gdx.graphics.Color.WHITE;
         b.setColor(flash);
+        // dungeon loot not yet taken: keys and one-item chests
+        if (sim.inDungeon()) {
+            for (com.jmgurr.broadsword.model.Lootable loot : sim.dungeonScreen().keys()) {
+                if (!sim.dungeonRun().taken(loot.id())) {
+                    b.draw(keySprite, loot.tx() * GameConfig.TILE,
+                            (World.SCREEN_H - 1 - loot.ty()) * GameConfig.TILE);
+                }
+            }
+            for (com.jmgurr.broadsword.model.Lootable loot : sim.dungeonScreen().items()) {
+                if (!sim.dungeonRun().taken(loot.id())) {
+                    b.draw(chestSprite, loot.tx() * GameConfig.TILE,
+                            (World.SCREEN_H - 1 - loot.ty()) * GameConfig.TILE);
+                }
+            }
+        }
         // the Flute, still on its tile until Link walks onto it
         if (!sim.hasFlute() && sim.world().flute() != null && !sim.inCave()
                 && sim.world().flute().sx() == link.sx && sim.world().flute().sy() == link.sy) {
@@ -208,6 +242,12 @@ public class GameScreen implements Screen {
         drawUiCell(b, 2, 3, GameConfig.LOGICAL_H - 57,
                 sim.fireReady() ? com.badlogic.gdx.graphics.Color.WHITE
                         : new com.badlogic.gdx.graphics.Color(0.3f, 0.3f, 0.3f, 1f));
+        // Keys held, inside a dungeon
+        if (sim.inDungeon()) {
+            layout.setText(font, "x " + sim.dungeonRun().keys());
+            font.draw(b, layout, 3, GameConfig.LOGICAL_H - 66);
+            b.draw(keySprite, 15, GameConfig.LOGICAL_H - 81);
+        }
 
         if (sim.phase() == Sim.Phase.GAME_OVER) {
             layout.setText(font, "GAME OVER");

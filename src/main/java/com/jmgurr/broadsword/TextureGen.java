@@ -5,6 +5,7 @@ import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.Pixmap;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
+import com.jmgurr.broadsword.model.Tile;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -16,10 +17,11 @@ public final class TextureGen {
 
     /**
      * Tile strip, one cell per Tile ordinal:
-     * GRASS DIRT SAND ROCK TREE TOMBSTONE WATER ENTRANCE FLAMMABLE_TREE STAIRS CAVE_FLOOR.
+     * GRASS DIRT SAND ROCK TREE TOMBSTONE WATER ENTRANCE FLAMMABLE_TREE STAIRS CAVE_FLOOR
+     * DUNGEON_WALL DUNGEON_FLOOR DOOR LOCKED_DOOR DUNGEON_EXIT.
      */
     public static Texture tiles() {
-        int w = 11 * GameConfig.TILE;
+        int w = Tile.values().length * GameConfig.TILE;
         Pixmap pm = new Pixmap(w, GameConfig.TILE, Pixmap.Format.RGBA8888);
         pm.setColor(Color.BLACK);
         pm.fill();
@@ -44,8 +46,33 @@ public final class TextureGen {
                             ? (lx + ly) % 4 < 2 ? new Color(0.75f, 0.7f, 0.6f, 1) : new Color(0.2f, 0.17f, 0.2f, 1)
                             : new Color(0.3f, 0.3f, 0.32f, 1));
                     // cave floor: near-black, faint speckle so the space still reads
-                    default -> pm.setColor(n == 0 ? new Color(0.08f, 0.08f, 0.11f, 1)
+                    case 10 -> pm.setColor(n == 0 ? new Color(0.08f, 0.08f, 0.11f, 1)
                             : new Color(0.05f, 0.05f, 0.075f, 1));
+                    // dungeon wall: dark blue-grey masonry with bevelled courses
+                    case 11 -> pm.setColor(ly % 8 < 2 || lx % 8 < 2
+                            ? new Color(0.16f, 0.16f, 0.24f, 1)
+                            : (lx + ly) % 6 == 0 ? new Color(0.34f, 0.34f, 0.46f, 1)
+                                    : new Color(0.26f, 0.26f, 0.36f, 1));
+                    // dungeon floor: grey stone slab, lighter than the wall
+                    case 12 -> pm.setColor(lx == 0 || ly == 0 || lx == 15 || ly == 15
+                            ? new Color(0.28f, 0.27f, 0.33f, 1)
+                            : n == 0 ? new Color(0.46f, 0.45f, 0.52f, 1)
+                                    : new Color(0.4f, 0.39f, 0.46f, 1));
+                    // door: a brown arched door in a stone frame
+                    case 13 -> pm.setColor((lx < 2 || lx >= 14 || ly < 2) ? new Color(0.32f, 0.3f, 0.36f, 1)
+                            : lx >= 4 && lx <= 11 ? new Color(0.5f, 0.32f, 0.14f, 1)
+                                    : new Color(0.42f, 0.27f, 0.12f, 1));
+                    // locked door: same arch, barred over
+                    case 14 -> pm.setColor((lx < 2 || lx >= 14 || ly < 2) ? new Color(0.32f, 0.3f, 0.36f, 1)
+                            : lx >= 4 && lx <= 11
+                                    ? (ly % 5 < 2 || lx == 4 || lx == 11
+                                            ? new Color(0.55f, 0.55f, 0.6f, 1) : new Color(0.45f, 0.3f, 0.14f, 1))
+                                    : new Color(0.42f, 0.27f, 0.12f, 1));
+                    // dungeon exit: the door arch glows white
+                    default -> pm.setColor((lx < 2 || lx >= 14 || ly < 2) ? new Color(0.32f, 0.3f, 0.36f, 1)
+                            : lx >= 4 && lx <= 11 && (lx + ly) % 3 != 0
+                                    ? new Color(0.92f, 0.92f, 0.98f, 1)
+                                    : new Color(0.7f, 0.7f, 0.8f, 1));
                 }
                 pm.drawPixel(x, y);
             }
@@ -192,6 +219,33 @@ public final class TextureGen {
                             c = new Color(0.15f, 0.15f, 0.35f, 0.9f); // eyes
                         }
                     }
+                    case 12 -> {
+                        // Key: a small gold key
+                        if (lx >= 3 && lx <= 6 && ly >= 3 && ly <= 6) {
+                            c = new Color(0.95f, 0.8f, 0.2f, 1);
+                        }
+                        if (lx == 4 && ly >= 6 && ly <= 12) {
+                            c = new Color(0.95f, 0.8f, 0.2f, 1); // shaft
+                        }
+                        if (lx >= 4 && lx <= 7 && (ly == 10 || ly == 12)) {
+                            c = new Color(0.95f, 0.8f, 0.2f, 1); // bits
+                        }
+                    }
+                    case 13 -> {
+                        // Item chest: brown box with a gold band
+                        if (lx >= 2 && lx <= 13 && ly >= 5 && ly <= 13) {
+                            c = new Color(0.45f, 0.3f, 0.14f, 1);
+                        }
+                        if (ly == 7 || ly == 8) {
+                            c = new Color(0.9f, 0.78f, 0.25f, 1);
+                        }
+                        if (lx == 7 || lx == 8) {
+                            c = new Color(0.9f, 0.78f, 0.25f, 1); // lock strip
+                        }
+                        if (lx == 2 || lx == 13 || ly == 5 || ly == 13) {
+                            c = new Color(0.3f, 0.2f, 0.1f, 1); // edge
+                        }
+                    }
                     case 11 -> {
                         // Flute: a pale gold pipe lying on the ground
                         if (lx >= 3 && lx <= 11 && ly >= 6 && ly <= 8) {
@@ -223,10 +277,12 @@ public final class TextureGen {
         return new Texture(pm);
     }
 
-    /** Sprite strip cells: Link, Grunt, sword, Octorock, fireball, Link-left, sword-up, shield, cloud, Link-back, Ghost, Flute. */
-    public static final int SPRITE_CELLS = 12;
+    /** Sprite strip cells: Link, Grunt, sword, Octorock, fireball, Link-left, sword-up, shield, cloud, Link-back, Ghost, Flute, Key, Chest. */
+    public static final int SPRITE_CELLS = 14;
     public static final int SPRITE_GHOST = 10;
     public static final int SPRITE_FLUTE = 11;
+    public static final int SPRITE_KEY = 12;
+    public static final int SPRITE_CHEST = 13;
 
     private static boolean heart(int x, int y) {
         // classic 5x3 pixel heart, scaled to 3x per pixel

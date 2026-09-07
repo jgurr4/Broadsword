@@ -2,6 +2,7 @@ package com.jmgurr.broadsword.model;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Random;
 import java.util.function.Consumer;
 
@@ -61,6 +62,8 @@ public final class Sim {
     }
 
     private final World world;
+    /** Authored dungeon data (V1: the hydra). Run state lives in dungeonRun. */
+    private Dungeon dungeon;
     private final Link link;
     private Consumer<SaveState> saveSink = s -> {
     };
@@ -104,9 +107,16 @@ public final class Sim {
     private int enemyScreenKey = Integer.MIN_VALUE;
     private float projectileTimer = 0;
 
+    // ---- T9: Dungeon Core (authored multi-screen dungeon) ----
+    /** Keys held, locks opened and loot taken; persists across exits and deaths. */
+    private final DungeonRun dungeonRun = new DungeonRun();
+    private boolean inDungeon;
+    private boolean diedInDungeon;
+
     /** A new game: fresh world from the seed, Link at spawn. */
     public Sim(long seed) {
         this.world = WorldGenerator.generate(seed);
+        this.dungeon = Dungeon.loadHydra();
         this.link = new Link(World.SPAWN_SX, World.SPAWN_SY, World.SPAWN_TX, World.SPAWN_TY);
         newScreenVisit();
         placeScreenEnemies();
@@ -115,9 +125,16 @@ public final class Sim {
     /** Continue: re-derive the saved world from its seed, resume at the saved position. */
     public Sim(SaveState save) {
         this.world = WorldGenerator.generate(save.seed());
+        this.dungeon = Dungeon.loadHydra();
         this.link = new Link(save.sx(), save.sy(), save.tx(), save.ty());
         this.link.facing = save.facing();
         this.magic = save.magic();
+        int itemsHeld = 0;
+        for (int id : save.takenLoot()) {
+            if (this.dungeon.isItemId(id)) itemsHeld++;
+        }
+        this.dungeonRun.restore(save.dungeonKeys(), itemsHeld, save.openedLocks(), save.takenLoot());
+        this.inDungeon = save.inDungeon();
         if (save.secretRevealed()) {
             world.revealSecretStairs();
             this.secretRevealed = true;
@@ -138,7 +155,8 @@ public final class Sim {
     public SaveState saveState() {
         return new SaveState(world.seed(), link.sx, link.sy, link.tx, link.ty, link.facing,
                 magic, secretRevealed, cave == null ? SaveState.NO_CAVE : World.packCave(
-                        cave.entry().sx(), cave.entry().sy(), cave.entry().tx(), cave.entry().ty()), fluteTaken);
+                        cave.entry().sx(), cave.entry().sy(), cave.entry().tx(), cave.entry().ty()), fluteTaken,
+                dungeonRun.keys(), inDungeon, dungeonRun.openedLocks(), dungeonRun.takenLoot());
     }
 
     /**
@@ -170,7 +188,8 @@ public final class Sim {
         }
         if (desired != null && !interpolating && stepTimer >= STEP_INTERVAL) {
             int psx = link.sx, psy = link.sy;
-            if (link.step(terrain(), desired)) {
+            boolean moved = inDungeon ? stepDungeon(desired) : link.step(terrain(), desired);
+            if (moved) {
                 if (link.sx != psx || link.sy != psy) {
                     // crossed a screen edge: no slide animation across the seam,
                     // the fire is ready again, the Ghost ramp and the Flute
@@ -178,6 +197,7 @@ public final class Sim {
                     interpolating = false;
                     fireReady = true;
                     newScreenVisit();
+                    if (inDungeon) placeScreenEnemies(); // dungeon screens respawn their enemies
                     autosave();
                 } else {
                     interpolating = true;
@@ -187,6 +207,8 @@ public final class Sim {
                 stepTimer = 0;
                 takeFluteIfStandingOnIt();
                 useStairsIfStandingOnThem();
+                enterDungeonIfStandingOnEntrance();
+                takeDungeonLootIfStandingOnIt();
             }
         }
         stepTimer += delta;
@@ -203,7 +225,7 @@ public final class Sim {
         if (swing) {
             swing();
         }
-        if (!inCave() && enemyScreenKey != screenKey(link.sx, link.sy)) {
+        if (!inCave() && !inDungeon && enemyScreenKey != screenKey(link.sx, link.sy)) {
             placeScreenEnemies(); // leaving and returning respawns the tiles, jittered, in clouds
             enemyTimer = 0;
             projectileTimer = 0;
@@ -255,8 +277,8 @@ public final class Sim {
 
     /** Ghosts drift on their own smooth clock: they never take the tile grid. */
     private void stepGhosts(float delta) {
-        if (inCave()) {
-            return; // caves hold nothing, Ghosts included
+        if (inCave() || inDungeon) {
+            return; // caves and dungeons hold nothing ethereal, Ghosts included
         }
         if (!world.isCemetery(link.sx, link.sy) || fluteUsedThisVisit) {
             return; // Ghosts haunt the Cemetery only, and a played tune ends the visit's spawning
@@ -445,7 +467,201 @@ public final class Sim {
 
     /** The world Link currently walks on: the overworld, or the current cave room. */
     private Terrain terrain() {
+        if (inDungeon) {
+            DungeonScreen s = dungeonScreen();
+            return (sx, sy, tx, ty) -> tx >= 0 && tx < World.SCREEN_W && ty >= 0 && ty < World.SCREEN_H
+                    && dungeonTileWalkable(s, tx, ty);
+        }
         return inCave() ? caveRoomTerrain() : world;
+    }
+
+    // ---- T9: Dungeon Core -------------------------------------------------
+
+    public boolean inDungeon() {
+        return inDungeon;
+    }
+
+    /** Index of the dungeon screen Link occupies (link.sx doubles as it). */
+    public int dungeonScreenIndex() {
+        return link.sx;
+    }
+
+    /** Tests swap in a small authored dungeon; the overworld entrance still leads to it. */
+    void setDungeon(Dungeon d) {
+        this.dungeon = d;
+    }
+
+    /** Enter through the overworld entrance without walking onto it (tests). */
+    void enterDungeon() {
+        DungeonScreen entry = dungeon.entry();
+        ScreenPos e = entry.exitTile();
+        Link.Dir inward = entry.exitInward();
+        inDungeon = true;
+        link.sx = dungeon.indexOf(entry.id());
+        link.sy = 0;
+        link.tx = e.tx() + inward.dx;
+        link.ty = e.ty() + inward.dy;
+        link.facing = inward;
+        link.hearts = World.MAX_HEARTS; // like every entrance, arriving restores Hearts
+        interpolating = false;
+        fireReady = true;
+        newScreenVisit();
+        placeScreenEnemies();
+        autosave();
+    }
+
+    /** Step out of the dungeon onto the overworld, beside the entrance (tests). */
+    void leaveDungeon() {
+        leaveDungeonToOverworld();
+    }
+
+    public Dungeon dungeon() {
+        return dungeon;
+    }
+
+    /** Keys held, locks opened and loot taken; persists across exits and deaths. */
+    public DungeonRun dungeonRun() {
+        return dungeonRun;
+    }
+
+    /** The screen Link occupies inside the dungeon (link.sx is the screen index). */
+    public DungeonScreen dungeonScreen() {
+        return dungeon.screen(link.sx);
+    }
+
+    private boolean dungeonTileWalkable(DungeonScreen s, int tx, int ty) {
+        Tile t = s.grid().get(tx, ty);
+        if (t != Tile.DOOR) return t.walkable;
+        Map.Entry<Link.Dir, DungeonScreen.Door> at = s.doorAt(tx, ty);
+        return at == null || !at.getValue().locked() || dungeonRun.isOpen(at.getValue().lockId());
+    }
+
+    /** Walkable tile inside the current dungeon screen (out of bounds is wall). */
+    public boolean isDungeonWalkable(int tx, int ty) {
+        return tx >= 0 && tx < World.SCREEN_W && ty >= 0 && ty < World.SCREEN_H
+                && dungeonTileWalkable(dungeonScreen(), tx, ty);
+    }
+
+    /**
+     * One dungeon step. Passage exists only at authored doors: walking off a
+     * screen edge through an open door arrives at the target screen's return
+     * door; stepping off the overworld-exit tile returns to the overworld;
+     * bumping a locked door spends a key (any key opens any lock, consumed).
+     */
+    private boolean stepDungeon(Link.Dir d) {
+        DungeonScreen s = dungeonScreen();
+        link.facing = d;
+        int nx = link.tx + d.dx, ny = link.ty + d.dy;
+        if (nx >= 0 && nx < World.SCREEN_W && ny >= 0 && ny < World.SCREEN_H) {
+            Tile t = s.grid().get(nx, ny);
+            if (t == Tile.DOOR) {
+                Map.Entry<Link.Dir, DungeonScreen.Door> at = s.doorAt(nx, ny);
+                if (at != null && at.getValue().locked() && !dungeonRun.isOpen(at.getValue().lockId())) {
+                    if (dungeonRun.spendKey(at.getValue().lockId())) autosave();
+                    return false; // the door opens under the next step
+                }
+            }
+            if (!t.walkable) return false;
+            link.tx = nx;
+            link.ty = ny;
+            return true;
+        }
+        // off-screen: only an authored door leads out
+        DungeonScreen.Door door = s.dir(d);
+        if (door != null) {
+            if (door.locked() && !dungeonRun.isOpen(door.lockId())) {
+                if (dungeonRun.spendKey(door.lockId())) autosave();
+                return false;
+            }
+            ScreenPos arrive = dungeon.screen(door.target()).doorTile(opposite(d));
+            if (arrive == null) return false; // parse validates this pairing
+            link.sx = door.target();
+            link.tx = arrive.tx();
+            link.ty = arrive.ty();
+            return true;
+        }
+        if (s.grid().get(link.tx, link.ty) == Tile.DUNGEON_EXIT) {
+            leaveDungeonToOverworld();
+            return false; // leaveDungeon already placed Link and saved
+        }
+        return false;
+    }
+
+    /** Walking onto the overworld entrance tile enters the dungeon. */
+    private void enterDungeonIfStandingOnEntrance() {
+        if (inDungeon || inCave() || phase != Phase.PLAYING) return;
+        if (!world.isEntrance(link.sx, link.sy, link.tx, link.ty)) return;
+        DungeonScreen entry = dungeon.entry();
+        ScreenPos e = entry.exitTile();
+        Link.Dir inward = entry.exitInward();
+        inDungeon = true;
+        link.sx = dungeon.indexOf(entry.id());
+        link.sy = 0;
+        link.tx = e.tx() + inward.dx;
+        link.ty = e.ty() + inward.dy;
+        link.facing = inward;
+        link.hearts = World.MAX_HEARTS; // like every entrance, arriving restores Hearts
+        interpolating = false;
+        fireReady = true;
+        newScreenVisit();
+        placeScreenEnemies();
+        autosave();
+    }
+
+    /** Stepping off the exit tile: back to the overworld, beside the entrance. */
+    private void leaveDungeonToOverworld() {
+        inDungeon = false;
+        ScreenPos en = world.dungeonEntrance();
+        // any walkable neighbour of the entrance, never the entrance tile itself
+        int ax = en.tx(), ay = en.ty();
+        outer:
+        for (int[] d : new int[][]{
+                { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 }
+        }) {
+            int px = en.tx() + d[0], py = en.ty() + d[1];
+            if (world.walkable(en.sx(), en.sy(), px, py)) {
+                ax = px;
+                ay = py;
+                break outer;
+            }
+        }
+        link.sx = en.sx();
+        link.sy = en.sy();
+        link.tx = ax;
+        link.ty = ay;
+        link.hearts = World.MAX_HEARTS;
+        interpolating = false;
+        fireReady = true;
+        newScreenVisit();
+        placeScreenEnemies();
+        autosave();
+    }
+
+    /** Keys and items are contact pickups; taken loot never reappears. */
+    private void takeDungeonLootIfStandingOnIt() {
+        if (!inDungeon) return;
+        DungeonScreen s = dungeonScreen();
+        for (Lootable k : s.keys()) {
+            if (k.tx() == link.tx && k.ty() == link.ty && !dungeonRun.taken(k.id())) {
+                dungeonRun.takeKey(k.id());
+                autosave();
+            }
+        }
+        for (Lootable i : s.items()) {
+            if (i.tx() == link.tx && i.ty() == link.ty && !dungeonRun.taken(i.id())) {
+                dungeonRun.takeItem(i.id());
+                autosave();
+            }
+        }
+    }
+
+    static Link.Dir opposite(Link.Dir d) {
+        return switch (d) {
+            case UP -> Link.Dir.DOWN;
+            case DOWN -> Link.Dir.UP;
+            case LEFT -> Link.Dir.RIGHT;
+            case RIGHT -> Link.Dir.LEFT;
+        };
     }
 
     private Terrain caveRoomTerrain() {
@@ -473,6 +689,9 @@ public final class Sim {
      * takes. Persistent: a death never hands the Flute back.
      */
     private void takeFluteIfStandingOnIt() {
+        if (inDungeon) {
+            return; // dungeon screens reuse the index space, never the overworld's Flute
+        }
         if (!fluteTaken && world.isFlute(link.sx, link.sy, link.tx, link.ty)) {
             fluteTaken = true;
             autosave(); // an item acquired is a major event
@@ -481,6 +700,9 @@ public final class Sim {
 
     /** The stairs toggle: standing on a STAIRS tile after a step moves Link through it. */
     private void useStairsIfStandingOnThem() {
+        if (inDungeon) {
+            return; // dungeon screens reuse the index space, never the overworld's stairs
+        }
         if (inCave()) {
             if (cave.room().get(link.tx, link.ty) == Tile.STAIRS) {
                 leaveCave();
@@ -615,6 +837,7 @@ public final class Sim {
         if (link.hearts <= 0) {
             link.hearts = 0;
             phase = Phase.GAME_OVER;
+            diedInDungeon = inDungeon; // dying inside respawns at the dungeon entrance
         }
     }
 
@@ -781,6 +1004,19 @@ public final class Sim {
             enemyScreenKey = Integer.MIN_VALUE; // leaving the cave re-places the overworld screen
             return;
         }
+        if (inDungeon) {
+            // authored enemies, exact tiles, spawning clouds; respawn every visit
+            int key = screenKey(link.sx, link.sy);
+            for (int slot = 0; slot < dungeonScreen().enemies().size(); slot++) {
+                EnemySpawn sp = dungeonScreen().enemies().get(slot);
+                long wanderSeed = world.usedSeed() * 1000003L + key * 31L + slot;
+                Enemy e = new Enemy(sp.kind(), sp.tx(), sp.ty(), enemyHp(sp.kind()), wanderSeed);
+                e.spawning = ENEMY_SPAWN_DURATION;
+                enemies.add(e);
+            }
+            enemyScreenKey = ~key; // never equals an overworld key; re-placed per dungeon screen
+            return;
+        }
         List<EnemySpawn> placed = world.enemies(link.sx, link.sy);
         int key = screenKey(link.sx, link.sy);
         // visit counter makes every entry's layout different even on revisit
@@ -827,10 +1063,25 @@ public final class Sim {
             return;
         }
         link.hearts = World.MAX_HEARTS;
-        link.sx = World.SPAWN_SX;
-        link.sy = World.SPAWN_SY;
-        link.tx = World.SPAWN_TX;
-        link.ty = World.SPAWN_TY;
+        boolean inD = diedInDungeon;
+        diedInDungeon = false;
+        if (inD) {
+            // dying inside the dungeon respawns at the dungeon entrance; run progress persists
+            DungeonScreen entry = dungeon.entry();
+            ScreenPos e = entry.exitTile();
+            Link.Dir inward = entry.exitInward();
+            inDungeon = true;
+            link.sx = dungeon.indexOf(entry.id());
+            link.sy = 0;
+            link.tx = e.tx() + inward.dx;
+            link.ty = e.ty() + inward.dy;
+            link.facing = inward;
+        } else {
+            link.sx = World.SPAWN_SX;
+            link.sy = World.SPAWN_SY;
+            link.tx = World.SPAWN_TX;
+            link.ty = World.SPAWN_TY;
+        }
         cave = null;
         invulnTimer = 0;
         swordTimer = 0;
