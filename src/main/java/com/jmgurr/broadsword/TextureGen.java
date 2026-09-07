@@ -85,7 +85,7 @@ public final class TextureGen {
      * shield, cell 8 spawn cloud, cell 9 Link from behind (facing up).
      */
     public static Texture sprites() {
-        int w = 10 * GameConfig.TILE;
+        int w = SPRITE_CELLS * GameConfig.TILE;
         Pixmap pm = new Pixmap(w, GameConfig.TILE, Pixmap.Format.RGBA8888);
         for (int x = 0; x < w; x++) {
             for (int y = 0; y < GameConfig.TILE; y++) {
@@ -180,6 +180,27 @@ public final class TextureGen {
                                     : new Color(0.62f, 0.62f, 0.7f, 0.85f);
                         }
                     }
+                    case 10 -> {
+                        // Ghost: a pale translucent hooded wisp
+                        boolean head = lx >= 4 && lx <= 10 && ly >= 2 && ly <= 8;
+                        boolean skirt = lx >= 3 && lx <= 11 && ly >= 9 && ly <= 13
+                                && (lx + ly) % 4 != 0; // ragged hem
+                        if (head || skirt) {
+                            c = new Color(0.85f, 0.88f, 1f, 0.65f);
+                        }
+                        if ((lx == 6 || lx == 9) && ly >= 4 && ly <= 5) {
+                            c = new Color(0.15f, 0.15f, 0.35f, 0.9f); // eyes
+                        }
+                    }
+                    case 11 -> {
+                        // Flute: a pale gold pipe lying on the ground
+                        if (lx >= 3 && lx <= 11 && ly >= 6 && ly <= 8) {
+                            c = new Color(0.95f, 0.85f, 0.35f, 1);
+                        }
+                        if ((lx == 5 || lx == 8) && ly == 7) {
+                            c = new Color(0.55f, 0.45f, 0.1f, 1); // holes
+                        }
+                    }
                     default -> {
                         // Link from behind: hat peak, no face, boots apart
                         if (ly <= 4) {
@@ -201,6 +222,11 @@ public final class TextureGen {
         }
         return new Texture(pm);
     }
+
+    /** Sprite strip cells: Link, Grunt, sword, Octorock, fireball, Link-left, sword-up, shield, cloud, Link-back, Ghost, Flute. */
+    public static final int SPRITE_CELLS = 12;
+    public static final int SPRITE_GHOST = 10;
+    public static final int SPRITE_FLUTE = 11;
 
     private static boolean heart(int x, int y) {
         // classic 5x3 pixel heart, scaled to 3x per pixel

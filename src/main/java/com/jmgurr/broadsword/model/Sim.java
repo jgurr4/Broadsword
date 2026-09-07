@@ -41,6 +41,20 @@ public final class Sim {
     public static final int LIGHT_RANGE = 2;
     /** Seconds the Light beam stays visible. */
     public static final float LIGHT_FX_DURATION = 0.25f;
+    /** Ghosts: seconds Link must linger on a Cemetery screen before the first one drifts out. */
+    public static final float GHOST_FIRST_DELAY = 1.5f;
+    /** Ghosts: seconds between arrivals at the start of the ramp. */
+    public static final float GHOST_INTERVAL_START = 3.0f;
+    /** Ghosts: seconds of lingering over which the interval narrows to GHOST_INTERVAL_MIN. */
+    public static final float GHOST_RAMP_SECONDS = 30f;
+    /** Ghosts: the interval the ramp converges on. */
+    public static final float GHOST_INTERVAL_MIN = 1.5f;
+    /** Ghosts: how many may haunt one screen at once. */
+    public static final int GHOST_CAP = 6;
+    /** Ghosts: drift speed in tiles per second - slower than Link, faster than a Grunt. */
+    public static final float GHOST_SPEED = 1.5f;
+    /** Ghosts: closer than this (in tiles) and the touch drains a Heart. */
+    public static final float GHOST_TOUCH_RADIUS = 0.5f;
 
     public enum Phase {
         PLAYING, GAME_OVER
@@ -73,6 +87,16 @@ public final class Sim {
      */
     private boolean fireReady = true;
 
+    /** True once Link has picked up this world's Flute. Survives death and reload. */
+    private boolean fluteTaken = false;
+    /** The Flute has been played since the current visit began. */
+    private boolean fluteUsedThisVisit = false;
+    /** Seconds Link has lingered on this screen: drives the Ghost spawn ramp. */
+    private float ghostRampElapsed = 0;
+    /** Countdown to the next Ghost. */
+    private float ghostTimer = 0;
+    private Random visitRng = new Random();
+
     /** Live enemies of the screen Link currently occupies. */
     private final List<Enemy> enemies = new ArrayList<>();
     /** In-flight projectiles on the current screen. */
@@ -84,6 +108,7 @@ public final class Sim {
     public Sim(long seed) {
         this.world = WorldGenerator.generate(seed);
         this.link = new Link(World.SPAWN_SX, World.SPAWN_SY, World.SPAWN_TX, World.SPAWN_TY);
+        newScreenVisit();
         placeScreenEnemies();
     }
 
@@ -104,6 +129,8 @@ public final class Sim {
         } else if (save.caveKey() >= 0) {
             this.cave = world.caves().get(save.caveKey());
         }
+        this.fluteTaken = save.fluteTaken();
+        newScreenVisit();
         placeScreenEnemies();
     }
 
@@ -111,7 +138,7 @@ public final class Sim {
     public SaveState saveState() {
         return new SaveState(world.seed(), link.sx, link.sy, link.tx, link.ty, link.facing,
                 magic, secretRevealed, cave == null ? SaveState.NO_CAVE : World.packCave(
-                        cave.entry().sx(), cave.entry().sy(), cave.entry().tx(), cave.entry().ty()));
+                        cave.entry().sx(), cave.entry().sy(), cave.entry().tx(), cave.entry().ty()), fluteTaken);
     }
 
     /**
@@ -146,9 +173,11 @@ public final class Sim {
             if (link.step(terrain(), desired)) {
                 if (link.sx != psx || link.sy != psy) {
                     // crossed a screen edge: no slide animation across the seam,
-                    // the fire is ready again, and the run autosaves
+                    // the fire is ready again, the Ghost ramp and the Flute
+                    // start over, and the run autosaves
                     interpolating = false;
                     fireReady = true;
+                    newScreenVisit();
                     autosave();
                 } else {
                     interpolating = true;
@@ -156,6 +185,7 @@ public final class Sim {
                     interpProgress = 0;
                 }
                 stepTimer = 0;
+                takeFluteIfStandingOnIt();
                 useStairsIfStandingOnThem();
             }
         }
@@ -204,6 +234,132 @@ public final class Sim {
             enemyTimer = 0;
             stepEnemies();
         }
+        stepGhosts(delta);
+    }
+
+    // --- Ghosts and the Flute -------------------------------------------------
+
+    /**
+     * The one screen visit's bookkeeping: called whenever Link arrives on a
+     * screen he was not on a moment ago. The Flute gets its use back and the
+     * Ghost ramp starts from zero, which is the ticket's "resets on re-entry".
+     */
+    private void newScreenVisit() {
+        long visitKey = screenKey(link.sx, link.sy) * 2L + (inCave() ? 1 : 0);
+        fluteUsedThisVisit = false;
+        ghostRampElapsed = 0;
+        ghostTimer = GHOST_FIRST_DELAY;
+        enemies.removeIf(e -> e.kind == EnemyKind.GHOST);
+        visitRng = new Random(world.usedSeed() * 1000003L + visitKey * 7919L + entryCounter * 104729L);
+    }
+
+    /** Ghosts drift on their own smooth clock: they never take the tile grid. */
+    private void stepGhosts(float delta) {
+        if (inCave()) {
+            return; // caves hold nothing, Ghosts included
+        }
+        if (!world.isCemetery(link.sx, link.sy) || fluteUsedThisVisit) {
+            return; // Ghosts haunt the Cemetery only, and a played tune ends the visit's spawning
+        }
+        ghostRampElapsed += delta;
+        ghostTimer = Math.max(0, ghostTimer - delta);
+        if (ghostTimer <= 0 && liveGhosts() < GHOST_CAP) {
+            spawnGhost();
+            ghostTimer = currentGhostInterval();
+        }
+        boolean touch = false;
+        for (Enemy e : enemies) {
+            if (!e.alive || !e.ethereal) {
+                continue;
+            }
+            double dx = link.tx - e.fx, dy = link.ty - e.fy;
+            double len = Math.hypot(dx, dy);
+            if (len > 1e-6) {
+                e.fx += dx / len * GHOST_SPEED * delta;
+                e.fy += dy / len * GHOST_SPEED * delta;
+            }
+            e.tx = (int) Math.round(e.fx);
+            e.ty = (int) Math.round(e.fy);
+            if (e.tx < 0 || e.tx >= World.SCREEN_W || e.ty < 0 || e.ty >= World.SCREEN_H) {
+                e.alive = false; // drifted off the screen: despawned
+                continue;
+            }
+            if (!world.walkable(link.sx, link.sy, e.tx, e.ty)) {
+                e.solidPass = true; // proof it is phasing, not walking
+            }
+            if (Math.hypot(e.fx - link.tx, e.fy - link.ty) < GHOST_TOUCH_RADIUS) {
+                touch = true;
+            }
+        }
+        enemies.removeIf(e -> !e.alive && e.ethereal);
+        if (touch) {
+            damageLink(); // a Ghost's touch is worth 1 Heart, i-frames and all
+        }
+    }
+
+    /** The ramp: GHOST_INTERVAL_START narrowing to GHOST_INTERVAL_MIN over GHOST_RAMP_SECONDS. */
+    private float currentGhostInterval() {
+        float t = Math.min(1, ghostRampElapsed / GHOST_RAMP_SECONDS);
+        return GHOST_INTERVAL_START + (GHOST_INTERVAL_MIN - GHOST_INTERVAL_START) * t;
+    }
+
+    private int liveGhosts() {
+        int n = 0;
+        for (Enemy e : enemies) {
+            if (e.alive && e.ethereal) {
+                n++;
+            }
+        }
+        return n;
+    }
+
+    /** One Ghost drifts out of the tombstones, never on Link's own tile. */
+    private void spawnGhost() {
+        for (int guard = 0; guard < 60; guard++) {
+            int tx = visitRng.nextInt(World.SCREEN_W);
+            int ty = visitRng.nextInt(World.SCREEN_H);
+            if (tx == link.tx && ty == link.ty) {
+                continue;
+            }
+            Enemy g = new Enemy(EnemyKind.GHOST, tx, ty, enemyHp(EnemyKind.GHOST),
+                    (world.usedSeed() ^ screenKey(link.sx, link.sy) * 31337L) * 2654435761L + guard);
+            g.ethereal = true;
+            enemies.add(g);
+            return;
+        }
+    }
+
+    /**
+     * The one per-world Flute, picked up by walking onto its Cemetery tile.
+     * True once Link holds it; it never goes back.
+     */
+    public boolean hasFlute() {
+        return fluteTaken;
+    }
+
+    /**
+     * Play the Flute: one tune per screen visit, for free. It dispels every
+     * Ghost on the screen and stops the spawning while Link stays here. False
+     * when he has no Flute or has already played this visit.
+     */
+    public boolean playFlute() {
+        if (phase != Phase.PLAYING || !fluteTaken || fluteUsedThisVisit) {
+            return false;
+        }
+        fluteUsedThisVisit = true;
+        for (Enemy e : enemies) {
+            if (e.ethereal) {
+                e.alive = false; // dispelled: the tune does not kill, it clears
+            }
+        }
+        enemies.removeIf(e -> !e.alive && e.ethereal);
+        ghostTimer = Float.MAX_VALUE; // no Ghost returns while Link lingers here
+        return true;
+    }
+
+    /** True while the Flute can still be played on this screen visit. */
+    public boolean fluteReady() {
+        return fluteTaken && !fluteUsedThisVisit;
     }
 
     /**
@@ -262,7 +418,8 @@ public final class Sim {
                     autosave(); // a burned tree is persistent world state
                 }
                 for (Enemy e : enemies) {
-                    if (e.alive && e.spawning <= 0 && e.tx == tx && e.ty == ty) {
+                    // the closed list: Ghosts are not on it, and phase straight through
+                    if (e.alive && e.spawning <= 0 && !e.ethereal && e.tx == tx && e.ty == ty) {
                         hit(e, link.facing); // knocked back along the beam
                     }
                 }
@@ -311,6 +468,17 @@ public final class Sim {
         return secretRevealed;
     }
 
+    /**
+     * The Flute pickup: its tile is walkable, and stepping onto it is all it
+     * takes. Persistent: a death never hands the Flute back.
+     */
+    private void takeFluteIfStandingOnIt() {
+        if (!fluteTaken && world.isFlute(link.sx, link.sy, link.tx, link.ty)) {
+            fluteTaken = true;
+            autosave(); // an item acquired is a major event
+        }
+    }
+
     /** The stairs toggle: standing on a STAIRS tile after a step moves Link through it. */
     private void useStairsIfStandingOnThem() {
         if (inCave()) {
@@ -336,6 +504,7 @@ public final class Sim {
         link.facing = Link.Dir.DOWN; // the exit stairs are south of the entry tile in every room
         interpolating = false;
         fireReady = true; // entering the cave counts as entering a new screen
+        newScreenVisit();
         placeScreenEnemies(); // returning re-places the overworld screen
         autosave();
     }
@@ -356,6 +525,7 @@ public final class Sim {
                 link.ty = ty;
                 interpolating = false;
                 fireReady = true; // back on the overworld: the fire is ready again
+                newScreenVisit();
                 placeScreenEnemies();
                 autosave();
                 return;
@@ -375,7 +545,8 @@ public final class Sim {
         int hx = link.tx + blow.dx;
         int hy = link.ty + blow.dy;
         for (Enemy e : enemies) {
-            if (e.alive && e.spawning <= 0 && e.tx == hx && e.ty == hy) {
+            // the sword passes through a Ghost: it is not on the closed list
+            if (e.alive && e.spawning <= 0 && !e.ethereal && e.tx == hx && e.ty == hy) {
                 hit(e, blow);
             }
         }
@@ -447,9 +618,13 @@ public final class Sim {
         }
     }
 
-    /** V1 HP default for every species (tunable per kind when they diverge). */
+    /** V1 HP default per species (tunable per kind when they diverge). */
     static int enemyHp(EnemyKind kind) {
-        return kind == EnemyKind.OCTOROCK ? OCTOROCK_HP : GRUNT_HP;
+        return switch (kind) {
+            case OCTOROCK -> OCTOROCK_HP;
+            case GHOST -> 1; // nothing damages a Ghost; the Flute dispels it outright
+            default -> GRUNT_HP;
+        };
     }
 
     /** Grunt: chase within aggro radius, random walk beyond it; blocked by terrain and enemies. */
@@ -666,6 +841,7 @@ public final class Sim {
         interpolating = false;
         interpProgress = 1;
         fireReady = true; // respawn is a new screen
+        newScreenVisit();
         phase = Phase.PLAYING;
         placeScreenEnemies();
     }

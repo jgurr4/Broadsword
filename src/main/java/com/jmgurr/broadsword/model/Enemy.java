@@ -10,6 +10,18 @@ import java.util.Random;
 public final class Enemy {
     public final EnemyKind kind;
     public int tx, ty;
+    /**
+     * Float position, in tiles, for ethereal movers: it drifts on a smooth
+     * clock and ignores the tick grid. Walkers keep these equal to tx/ty.
+     */
+    public double fx, fy;
+    /**
+     * True while this enemy moves in float space and phases through terrain
+     * and Link (Ghosts). Solid checks and tile occupancy do not apply to it.
+     */
+    public boolean ethereal = false;
+    /** Test hook: this ethereal enemy's float position sat on a solid tile. */
+    public boolean solidPass = false;
     /** Tile the current slide started from, and its progress 1..0 (0 = arrived). */
     public int fromTx, fromTy;
     public float interp = 0;
@@ -33,6 +45,8 @@ public final class Enemy {
         this.kind = kind;
         this.tx = tx;
         this.ty = ty;
+        this.fx = tx;
+        this.fy = ty;
         this.fromTx = tx;
         this.fromTy = ty;
         this.hp = hp;

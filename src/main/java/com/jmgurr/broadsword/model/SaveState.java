@@ -14,17 +14,18 @@ import java.util.Optional;
  * types: parsing is testable headlessly; file I/O lives in the render layer.
  */
 public record SaveState(long seed, int sx, int sy, int tx, int ty, Link.Dir facing,
-        int magic, boolean secretRevealed, int caveKey) {
+        int magic, boolean secretRevealed, int caveKey, boolean fluteTaken) {
     /** {@code caveKey} values: -1 on the overworld; v2's "in the secret cave" marker. */
     public static final int NO_CAVE = -1;
     public static final int CAVE_SECRET_V2 = -2;
-    public static final int VERSION = 3;
+    public static final int VERSION = 4;
     static final int VERSION_V1 = 1;
     static final int VERSION_V2 = 2;
+    static final int VERSION_V3 = 3;
 
-    /** A new run: full Magic, the Secret still hidden, Link on the overworld. */
+    /** A new run: full Magic, the Secret still hidden, no Flute, Link on the overworld. */
     public SaveState(long seed, int sx, int sy, int tx, int ty, Link.Dir facing) {
-        this(seed, sx, sy, tx, ty, facing, World.MAX_MAGIC, false, NO_CAVE);
+        this(seed, sx, sy, tx, ty, facing, World.MAX_MAGIC, false, NO_CAVE, false);
     }
 
     public String format() {
@@ -34,7 +35,8 @@ public record SaveState(long seed, int sx, int sy, int tx, int ty, Link.Dir faci
                 + "facing=" + facing.name() + "\n"
                 + "magic=" + magic + "\n"
                 + "secret=" + (secretRevealed ? 1 : 0) + "\n"
-                + "cave=" + caveKey + "\n";
+                + "cave=" + caveKey + "\n"
+                + "flute=" + (fluteTaken ? 1 : 0) + "\n";
     }
 
     /** Parse a save file. Any deviation (bad version, bad numbers, out-of-world position) is corrupt. */
@@ -49,6 +51,7 @@ public record SaveState(long seed, int sx, int sy, int tx, int ty, Link.Dir faci
         Integer magic = null;
         Boolean secret = null;
         Integer cave = null;
+        Boolean flute = null;
         for (String line : text.split("\\R")) {
             int eq = line.indexOf('=');
             if (eq < 0) {
@@ -74,6 +77,7 @@ public record SaveState(long seed, int sx, int sy, int tx, int ty, Link.Dir faci
                     case "magic" -> magic = Integer.parseInt(value);
                     case "secret" -> secret = flag(value);
                     case "cave" -> cave = Integer.parseInt(value);
+                    case "flute" -> flute = flag(value);
                     default -> {
                     }
                 }
@@ -84,7 +88,7 @@ public record SaveState(long seed, int sx, int sy, int tx, int ty, Link.Dir faci
         if (version == null || seed == null || link == null || facing == null) {
             return Optional.empty();
         }
-        boolean known = version == VERSION || version == VERSION_V2 || version == VERSION_V1;
+        boolean known = version == VERSION || version == VERSION_V3 || version == VERSION_V2 || version == VERSION_V1;
         if (!known || !World.inWorld(link[0], link[1])
                 || link[2] < 0 || link[2] >= World.SCREEN_W
                 || link[3] < 0 || link[3] >= World.SCREEN_H) {
@@ -102,8 +106,9 @@ public record SaveState(long seed, int sx, int sy, int tx, int ty, Link.Dir faci
         if (caveAt != NO_CAVE && caveAt != CAVE_SECRET_V2 && (caveAt < 0 || caveAt >= caveKeySpace())) {
             return Optional.empty();
         }
+        // v3 and older saves predate the Flute: it is back on its tile.
         return Optional.of(new SaveState(seed, link[0], link[1], link[2], link[3], facing,
-                magicLeft, secret != null && secret, caveAt));
+                magicLeft, secret != null && secret, caveAt, flute != null && flute));
     }
 
     private static int caveKeySpace() {

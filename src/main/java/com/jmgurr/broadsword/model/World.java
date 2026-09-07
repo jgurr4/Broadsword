@@ -45,6 +45,8 @@ public class World implements Terrain {
     private final ScreenPos entrance;
     private final ScreenPos secretTree;
     private final Map<Landmark, ScreenPos> landmarks;
+    /** The one Flute, on a walkable Cemetery tile. */
+    private final ScreenPos flute;
     private final List<EnemySpawn>[] enemiesByScreen;
     /** All caves of this world, keyed by the packed global tile of their overworld entrance. */
     private final Map<Integer, Cave> caves;
@@ -52,7 +54,7 @@ public class World implements Terrain {
     @SuppressWarnings("unchecked")
     World(long seed, long usedSeed, int attempts, Screen[][] screens, Archetype[][] archetypes, int[][] tiers,
             ScreenPos entrance, Map<Landmark, ScreenPos> landmarks, List<EnemySpawn>[] enemiesByScreen,
-            ScreenPos secretTree, Map<Integer, Cave> caves) {
+            ScreenPos secretTree, Map<Integer, Cave> caves, ScreenPos flute) {
         this.seed = seed;
         this.usedSeed = usedSeed;
         this.attempts = attempts;
@@ -62,6 +64,7 @@ public class World implements Terrain {
         this.entrance = entrance;
         this.secretTree = secretTree;
         this.landmarks = Collections.unmodifiableMap(new EnumMap<>(landmarks));
+        this.flute = flute;
         this.enemiesByScreen = enemiesByScreen;
         this.caves = caves;
         // The Old woman's Cave sits behind the Secret tree in every world; its entrance
@@ -235,6 +238,15 @@ public class World implements Terrain {
 
     public boolean isCemetery(int sx, int sy) {
         return landmarkAt(sx, sy) == Landmark.CEMETERY;
+    }
+
+    /** The one Flute's tile, or null if this world has none. */
+    public ScreenPos flute() {
+        return flute;
+    }
+
+    public boolean isFlute(int sx, int sy, int tx, int ty) {
+        return flute != null && flute.sx() == sx && flute.sy() == sy && flute.tx() == tx && flute.ty() == ty;
     }
 
     /** Enemies the generator placed on a screen; empty for safe screens. */

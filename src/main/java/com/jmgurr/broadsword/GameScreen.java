@@ -48,6 +48,9 @@ public class GameScreen implements Screen {
         if (Gdx.input.isKeyJustPressed(Input.Keys.F)) {
             sim.castLight();
         }
+        if (Gdx.input.isKeyJustPressed(Input.Keys.G)) {
+            sim.playFlute(); // the tune: dispels this screen's Ghosts, once per visit
+        }
         if (sim.phase() == Sim.Phase.GAME_OVER && Gdx.input.isKeyJustPressed(Input.Keys.R)) {
             sim.respawn();
         }
@@ -125,13 +128,21 @@ public class GameScreen implements Screen {
                         ? new com.badlogic.gdx.graphics.Color(1, 0.4f, 0.4f, 1)
                         : com.badlogic.gdx.graphics.Color.WHITE;
         b.setColor(flash);
+        // the Flute, still on its tile until Link walks onto it
+        if (!sim.hasFlute() && sim.world().flute() != null && !sim.inCave()
+                && sim.world().flute().sx() == link.sx && sim.world().flute().sy() == link.sy) {
+            com.jmgurr.broadsword.model.ScreenPos fp = sim.world().flute();
+            b.draw(TextureGen.region(sprites, TextureGen.SPRITE_FLUTE),
+                    fp.tx() * GameConfig.TILE, (World.SCREEN_H - 1 - fp.ty()) * GameConfig.TILE);
+        }
         for (com.jmgurr.broadsword.model.Enemy e : sim.enemies()) {
             if (!e.alive) {
                 continue;
             }
-            // glide from the tile the slide started on to the one it arrived at
-            float etx = e.fromTx + (e.tx - e.fromTx) * (1 - e.interp);
-            float ety = e.fromTy + (e.ty - e.fromTy) * (1 - e.interp);
+            // glide from the tile the slide started on to the one it arrived at;
+            // ethereal movers are already in smooth float space
+            float etx = e.ethereal ? (float) e.fx : e.fromTx + (e.tx - e.fromTx) * (1 - e.interp);
+            float ety = e.ethereal ? (float) e.fy : e.fromTy + (e.ty - e.fromTy) * (1 - e.interp);
             float ex = etx * GameConfig.TILE;
             float ey = (World.SCREEN_H - 1 - ety) * GameConfig.TILE;
             if (Sim.spawning(e)) {
@@ -140,6 +151,8 @@ public class GameScreen implements Screen {
                 b.setColor(1, 1, 1, 0.55f + 0.45f * pulse);
                 b.draw(TextureGen.region(sprites, 8), ex, ey);
                 b.setColor(flash);
+            } else if (e.ethereal) {
+                b.draw(TextureGen.region(sprites, TextureGen.SPRITE_GHOST), ex, ey);
             } else {
                 int cell = e.kind == com.jmgurr.broadsword.model.EnemyKind.OCTOROCK ? 3 : 1;
                 b.draw(TextureGen.region(sprites, cell), ex, ey);

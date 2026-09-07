@@ -147,8 +147,20 @@ public final class WorldGenerator {
             placeEnemies(rng, screens, tiers, landmarks, entrance, enemies);
         }
         ScreenPos secretTree = chooseSecretTree(screens, usedSeed);
+        ScreenPos flute = flutePos(landmarks);
         return new World(seed, usedSeed, attempt, screens, archetypes, tiers,
-                entrance == null ? new ScreenPos(-1, -1, -1, -1) : entrance, landmarks, enemies, secretTree, caves);
+                entrance == null ? new ScreenPos(-1, -1, -1, -1) : entrance, landmarks, enemies, secretTree, caves,
+                flute);
+    }
+
+    /**
+     * The one Flute sits on the lane crossing of the Cemetery's anchor screen:
+     * lanes are never dammed, so that tile is walkable in every world, and the
+     * Cemetery is 8 screens from the entrance, never the spawn or entrance tile.
+     */
+    static ScreenPos flutePos(Map<Landmark, ScreenPos> landmarks) {
+        ScreenPos a = landmarks.get(Landmark.CEMETERY);
+        return a == null ? null : new ScreenPos(a.sx(), a.sy(), World.LANE_X, World.LANE_Y);
     }
 
     /** Fraction of Rockfield/Mountain screens that hold a cave. Tunable. */
@@ -904,7 +916,13 @@ public final class WorldGenerator {
     /** Post-conditions every generated world must satisfy. */
     static boolean valid(World w) {
         return regionArchetypesAreSized(w) && screenBordersMatch(w) && entranceIsPlaced(w) && spawnIsWalkable(w)
-                && allScreensReachable(w) && enemiesAreLegal(w) && cavesArePlaced(w);
+                && allScreensReachable(w) && enemiesAreLegal(w) && cavesArePlaced(w) && fluteIsPlaced(w);
+    }
+
+    /** The one Flute sits on a walkable Cemetery tile. */
+    static boolean fluteIsPlaced(World w) {
+        ScreenPos f = w.flute();
+        return f != null && w.isCemetery(f.sx(), f.sy()) && w.walkable(f.sx(), f.sy(), f.tx(), f.ty());
     }
 
     /**
