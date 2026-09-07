@@ -37,18 +37,8 @@ public class GameScreen implements Screen {
         this.ui = game.ui();
         this.sprites = game.sprites();
         // tile strip cells match the Tile enum ordinals
-        this.tileRegions = new TextureRegion[] {
-            TextureGen.region(tiles, 0),
-            TextureGen.region(tiles, 1),
-            TextureGen.region(tiles, 2),
-            TextureGen.region(tiles, 3),
-            TextureGen.region(tiles, 4),
-            TextureGen.region(tiles, 5),
-            TextureGen.region(tiles, 6),
-            TextureGen.region(tiles, 7),
-            TextureGen.region(tiles, 8),
-            TextureGen.region(tiles, 9)
-        };
+        this.tileRegions = TextureGen.regions(tiles, Tile.values().length)
+                .toArray(new TextureRegion[0]);
     }
 
     @Override
@@ -109,7 +99,11 @@ public class GameScreen implements Screen {
             for (int x = 0; x < World.SCREEN_W; x++) {
                 Tile t = sim.inCave() ? sim.currentCave().room().get(x, y)
                         : sim.world().screen(link.sx, link.sy).get(x, y);
+                if (sim.inCave() && t == Tile.ROCK) {
+                    b.setColor(0.3f, 0.3f, 0.34f, 1f); // cave walls stay dim next to the dark floor
+                }
                 b.draw(tileRegions[t.ordinal()], x * GameConfig.TILE, (World.SCREEN_H - 1 - y) * GameConfig.TILE);
+                b.setColor(1, 1, 1, 1);
             }
         }
         // Light beam: two tiles straight ahead of the facing it was cast along
@@ -135,8 +129,11 @@ public class GameScreen implements Screen {
             if (!e.alive) {
                 continue;
             }
-            float ex = e.tx * GameConfig.TILE;
-            float ey = (World.SCREEN_H - 1 - e.ty) * GameConfig.TILE;
+            // glide from the tile the slide started on to the one it arrived at
+            float etx = e.fromTx + (e.tx - e.fromTx) * (1 - e.interp);
+            float ety = e.fromTy + (e.ty - e.fromTy) * (1 - e.interp);
+            float ex = etx * GameConfig.TILE;
+            float ey = (World.SCREEN_H - 1 - ety) * GameConfig.TILE;
             if (Sim.spawning(e)) {
                 // pulsing cloud: the enemy materialises after ENEMY_SPAWN_DURATION
                 float pulse = 0.5f + 0.5f * (e.spawning / Sim.ENEMY_SPAWN_DURATION);
@@ -173,12 +170,14 @@ public class GameScreen implements Screen {
         if (sim.swinging()) {
             float w = GameConfig.TILE * 0.6f;
             float h = GameConfig.TILE * 1.6f;
+            // pixel y grows up-screen, tile ty grows down-screen: UP is +y in pixels
             switch (f) {
                 case RIGHT -> b.draw(TextureGen.region(sprites, 2), linkPxX + GameConfig.TILE * 0.4f, linkPxY, h, GameConfig.TILE);
                 case LEFT -> b.draw(TextureGen.region(sprites, 2), linkPxX + GameConfig.TILE * 0.6f, linkPxY, -h, GameConfig.TILE);
-                // pixel y grows up-screen: UP extends with +h, DOWN with -h
-                case UP -> b.draw(TextureGen.region(sprites, 6), linkPxX + (GameConfig.TILE - w) / 2, linkPxY - GameConfig.TILE * 0.3f, w, h);
-                case DOWN -> b.draw(TextureGen.region(sprites, 6), linkPxX + (GameConfig.TILE - w) / 2, linkPxY + GameConfig.TILE * 0.3f, w, -h);
+                // mirror the horizontal reach along the axis: 0.4 tile into Link's
+                // tile, tip a full tile past the tile edge
+                case UP -> b.draw(TextureGen.region(sprites, 6), linkPxX + (GameConfig.TILE - w) / 2, linkPxY + GameConfig.TILE * 0.4f, w, h);
+                case DOWN -> b.draw(TextureGen.region(sprites, 6), linkPxX + (GameConfig.TILE - w) / 2, linkPxY + GameConfig.TILE * 0.6f, w, -h);
             }
         }
         // HUD: hearts top-left (filled vs. lost), magic below (both inset from the top edge)
@@ -186,12 +185,16 @@ public class GameScreen implements Screen {
             drawUiCell(b, 0, 3 + i * 12, GameConfig.LOGICAL_H - 19,
                     i < link.hearts ? com.badlogic.gdx.graphics.Color.WHITE : new com.badlogic.gdx.graphics.Color(0.3f, 0.3f, 0.3f, 1f));
         }
-        // Magic pips: bright = cast left, dim = spent (a death never refills them)
+        // Magic pips: spent by Spells, which V1 has none of, so they stay bright
         for (int i = 0; i < GameConfig.MAX_MAGIC; i++) {
             drawUiCell(b, 1, 3 + i * 12, GameConfig.LOGICAL_H - 38,
                     i < sim.magic() ? com.badlogic.gdx.graphics.Color.WHITE
                             : new com.badlogic.gdx.graphics.Color(0.3f, 0.3f, 0.3f, 1f));
         }
+        // Fire: one charge per screen entered, no Magic spent
+        drawUiCell(b, 2, 3, GameConfig.LOGICAL_H - 57,
+                sim.fireReady() ? com.badlogic.gdx.graphics.Color.WHITE
+                        : new com.badlogic.gdx.graphics.Color(0.3f, 0.3f, 0.3f, 1f));
 
         if (sim.phase() == Sim.Phase.GAME_OVER) {
             layout.setText(font, "GAME OVER");

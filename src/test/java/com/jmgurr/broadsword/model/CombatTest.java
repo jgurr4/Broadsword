@@ -349,7 +349,7 @@ class CombatTest {
         enemyStep(sim);
         assertEquals(2, l.hearts);
 
-        idle(sim, Sim.I_FRAME_DURATION * 0.5f);
+        idle(sim, Sim.I_FRAME_DURATION * 0.4f);
         enemyStep(sim);
         assertEquals(2, l.hearts, "still invulnerable");
 

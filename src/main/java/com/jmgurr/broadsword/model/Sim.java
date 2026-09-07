@@ -13,8 +13,8 @@ import java.util.function.Consumer;
 public final class Sim {
     // --- tunables -----------------------------------------------------------
     public static final float STEP_INTERVAL = 0.12f; // ~8 tiles/sec
-    /** Enemy step clock: one tile per step (~4 tiles/sec). */
-    public static final float ENEMY_STEP_INTERVAL = 0.25f;
+    /** Enemy step clock: one tile per step (~2 tiles/sec). */
+    public static final float ENEMY_STEP_INTERVAL = 0.5f;
     /** Minimum time between sword swings. */
     public static final float SWORD_COOLDOWN = 0.4f;
     /** How long the blade stays out (the vulnerable "swinging" window). */
@@ -67,6 +67,11 @@ public final class Sim {
     private float swingTimer = 0; // blade still out while > 0
     private float invulnTimer = 0; // i-frames remaining
     private float enemyTimer = 0;
+    /**
+     * Fire charges left: one free cast per screen entered, no Magic involved.
+     * Refilled whenever Link arrives on a new screen (or re-enters a cave).
+     */
+    private boolean fireReady = true;
 
     /** Live enemies of the screen Link currently occupies. */
     private final List<Enemy> enemies = new ArrayList<>();
@@ -141,8 +146,9 @@ public final class Sim {
             if (link.step(terrain(), desired)) {
                 if (link.sx != psx || link.sy != psy) {
                     // crossed a screen edge: no slide animation across the seam,
-                    // and the run autosaves
+                    // the fire is ready again, and the run autosaves
                     interpolating = false;
+                    fireReady = true;
                     autosave();
                 } else {
                     interpolating = true;
@@ -173,6 +179,11 @@ public final class Sim {
             projectileTimer = 0;
         }
         for (Enemy e : enemies) {
+            if (e.interp > 0) {
+                e.interp = Math.max(0, e.interp - delta / ENEMY_STEP_INTERVAL);
+            }
+        }
+        for (Enemy e : enemies) {
             if (!e.alive) {
                 continue;
             }
@@ -182,15 +193,16 @@ public final class Sim {
                 e.fireTimer = Math.max(0, e.fireTimer - delta);
             }
         }
-        enemyTimer += delta;
-        if (enemyTimer >= ENEMY_STEP_INTERVAL) {
-            enemyTimer = 0;
-            stepEnemies();
-        }
+        // projectiles first: a fireball fired on this tick starts moving next tick
         projectileTimer += delta;
         while (projectileTimer >= PROJECTILE_STEP_INTERVAL) {
             projectileTimer -= PROJECTILE_STEP_INTERVAL;
             stepProjectiles();
+        }
+        enemyTimer += delta;
+        if (enemyTimer >= ENEMY_STEP_INTERVAL) {
+            enemyTimer = 0;
+            stepEnemies();
         }
     }
 
@@ -223,16 +235,18 @@ public final class Sim {
     }
 
     /**
-     * Cast Light: one Magic, a beam straight ahead of Link for {@link #LIGHT_RANGE}
-     * tiles. It passes through everything: enemies in the beam take 1 damage and
-     * one tile of knockback, flammable trees burn away, and burning the Secret
-     * tree reveals the stairs. Returns false (no Magic spent) when out of Magic.
+     * Cast Light: a beam straight ahead of Link for {@link #LIGHT_RANGE} tiles.
+     * It costs one fire charge, never Magic: Link has exactly one charge and it
+     * refills the moment he enters a new screen. It passes through everything:
+     * enemies in the beam take 1 damage and one tile of knockback, flammable
+     * trees burn away, and burning the Secret tree reveals the stairs. Returns
+     * false (no charge spent) when this screen's charge is already used.
      */
     public boolean castLight() {
-        if (phase != Phase.PLAYING || magic <= 0) {
+        if (phase != Phase.PLAYING || !fireReady) {
             return false;
         }
-        magic -= 1;
+        fireReady = false;
         lightFxTimer = LIGHT_FX_DURATION;
         lightFxFacing = link.facing;
         if (!inCave()) {
@@ -245,6 +259,7 @@ public final class Sim {
                 Tile tile = world.screen(link.sx, link.sy).get(tx, ty);
                 if (tile == Tile.FLAMMABLE_TREE) {
                     burn(link.sx, link.sy, tx, ty);
+                    autosave(); // a burned tree is persistent world state
                 }
                 for (Enemy e : enemies) {
                     if (e.alive && e.spawning <= 0 && e.tx == tx && e.ty == ty) {
@@ -253,8 +268,12 @@ public final class Sim {
                 }
             }
         }
-        autosave(); // Magic is persistent state
         return true;
+    }
+
+    /** True while this screen's fire charge is still unused. */
+    public boolean fireReady() {
+        return fireReady;
     }
 
     /** Burn one flammable tree; the Secret tree leaves stairs in its place. */
@@ -316,6 +335,7 @@ public final class Sim {
         link.ty = c.entryTy();
         link.facing = Link.Dir.DOWN; // the exit stairs are south of the entry tile in every room
         interpolating = false;
+        fireReady = true; // entering the cave counts as entering a new screen
         placeScreenEnemies(); // returning re-places the overworld screen
         autosave();
     }
@@ -335,6 +355,7 @@ public final class Sim {
                 link.tx = tx;
                 link.ty = ty;
                 interpolating = false;
+                fireReady = true; // back on the overworld: the fire is ready again
                 placeScreenEnemies();
                 autosave();
                 return;
@@ -372,6 +393,9 @@ public final class Sim {
         int kx = e.tx + blow.dx;
         int ky = e.ty + blow.dy;
         if (terrain().walkable(link.sx, link.sy, kx, ky) && !liveEnemyAt(kx, ky)) {
+            e.fromTx = e.tx;
+            e.fromTy = e.ty;
+            e.interp = 1;
             e.tx = kx;
             e.ty = ky;
         }
@@ -407,8 +431,8 @@ public final class Sim {
     }
 
     /**
-     * Take 1 Heart, obeying i-frames; 0 Hearts ends the run. The Old woman's
-     * Cave is safe; a rock cave guards its Octorock.
+     * Take 1 Heart, obeying i-frames; 0 Hearts ends the run. Caves are always
+     * safe: they hold no enemies.
      */
     private void damageLink() {
         if (invulnTimer > 0 || (inCave() && world.isSecretTree(cave.entry().sx(), cave.entry().sy(),
@@ -550,6 +574,10 @@ public final class Sim {
         if (!terrain().walkable(link.sx, link.sy, nx, ny) || liveEnemyAtOther(e, nx, ny)) {
             return false;
         }
+        // remember where the slide starts so the renderer can glide the sprite
+        e.fromTx = e.tx;
+        e.fromTy = e.ty;
+        e.interp = 1;
         e.tx = nx;
         e.ty = ny;
         return true;
@@ -574,15 +602,7 @@ public final class Sim {
         enemies.clear();
         projectiles.clear();
         if (inCave()) {
-            // the cave holds at most its one Octorock; it respawns on re-entry
-            EnemySpawn s = cave.enemy();
-            if (s != null) {
-                Enemy e = new Enemy(s.kind(), s.tx(), s.ty(), enemyHp(s.kind()),
-                        (world.usedSeed() ^ World.packCave(cave.entry().sx(), cave.entry().sy(),
-                                cave.entry().tx(), cave.entry().ty())) * 31337L);
-                e.spawning = ENEMY_SPAWN_DURATION;
-                enemies.add(e);
-            }
+            // caves are empty: nothing to place
             enemyScreenKey = Integer.MIN_VALUE; // leaving the cave re-places the overworld screen
             return;
         }
@@ -645,6 +665,7 @@ public final class Sim {
         projectileTimer = 0;
         interpolating = false;
         interpProgress = 1;
+        fireReady = true; // respawn is a new screen
         phase = Phase.PLAYING;
         placeScreenEnemies();
     }

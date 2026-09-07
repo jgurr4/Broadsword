@@ -14,7 +14,9 @@ public enum Tile {
     /** A tree the Light spell burns down; everything else treats it as a tree. */
     FLAMMABLE_TREE(false),
     /** Secret stairs revealed by burning the Secret tree; walkable, leads to the Cave. */
-    STAIRS(true);
+    STAIRS(true),
+    /** A cave's dark floor: walkable, and the only thing inside the walls. */
+    CAVE_FLOOR(true);
 
     public final boolean walkable;
 

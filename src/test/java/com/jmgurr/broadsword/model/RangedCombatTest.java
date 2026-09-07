@@ -180,7 +180,7 @@ class RangedCombatTest {
         enemyStep(sim); // first shot: fireTimer was 0
         assertEquals(1, liveProjectiles(sim));
 
-        for (int i = 0; i < 5; i++) { // 5 * 0.25s < 1.5s: still cooling down
+        for (int i = 0; i < 2; i++) { // 2 * 0.5s < 1.5s: still cooling down
             enemyStep(sim);
             assertEquals(0, liveProjectiles(sim), "no second shot inside the interval");
         }

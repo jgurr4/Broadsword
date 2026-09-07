@@ -153,8 +153,6 @@ public final class WorldGenerator {
 
     /** Fraction of Rockfield/Mountain screens that hold a cave. Tunable. */
     static final double CAVE_CHANCE = 0.5;
-    /** Chance that a carved cave holds one Octorock. */
-    static final double CAVE_OCTOROCK_CHANCE = 0.5;
 
     /**
      * Rock-formation caves: on CAVE_CHANCE of the Rockfield and Mountain
@@ -175,13 +173,13 @@ public final class WorldGenerator {
                 if (rng.nextDouble() >= CAVE_CHANCE) {
                     continue;
                 }
-                carveOne(screens, caves, sx, sy, rng);
+                carveOne(screens, caves, sx, sy);
             }
         }
     }
 
     /** One screen's carve attempt: first rock tile (scan order, interior only) with a walkable neighbour. */
-    private static boolean carveOne(Screen[][] screens, Map<Integer, Cave> caves, int sx, int sy, Random rng) {
+    private static boolean carveOne(Screen[][] screens, Map<Integer, Cave> caves, int sx, int sy) {
         Screen s = screens[sx][sy];
         for (int y = 1; y < World.SCREEN_H - 1; y++) {
             for (int x = 1; x < World.SCREEN_W - 1; x++) {
@@ -189,14 +187,10 @@ public final class WorldGenerator {
                     continue;
                 }
                 s.set(x, y, Tile.STAIRS);
-                Screen room = World.buildRockCaveRoom();
-                EnemySpawn guard = rng.nextDouble() < CAVE_OCTOROCK_CHANCE
-                        ? new EnemySpawn(EnemyKind.OCTOROCK, World.ROCK_CAVE_ENTRY_TX - 1,
-                                World.ROCK_CAVE_ENTRY_TY + 1)
-                        : null;
                 caves.put(World.packCave(sx, sy, x, y),
-                        new Cave(new ScreenPos(sx, sy, x, y), room, World.ROCK_CAVE_ENTRY_TX,
-                                World.ROCK_CAVE_ENTRY_TY, guard));
+                        new Cave(new ScreenPos(sx, sy, x, y),
+                                World.buildCaveRoom(World.ROCK_CAVE_ENTRY_TX, World.ROCK_CAVE_ENTRY_TY),
+                                World.ROCK_CAVE_ENTRY_TX, World.ROCK_CAVE_ENTRY_TY));
                 return true;
             }
         }

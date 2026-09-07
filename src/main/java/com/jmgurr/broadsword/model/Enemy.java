@@ -10,6 +10,9 @@ import java.util.Random;
 public final class Enemy {
     public final EnemyKind kind;
     public int tx, ty;
+    /** Tile the current slide started from, and its progress 1..0 (0 = arrived). */
+    public int fromTx, fromTy;
+    public float interp = 0;
     public int hp;
     public boolean alive = true;
     /** True after a sword hit; costs this enemy its next step. */
@@ -30,6 +33,8 @@ public final class Enemy {
         this.kind = kind;
         this.tx = tx;
         this.ty = ty;
+        this.fromTx = tx;
+        this.fromTy = ty;
         this.hp = hp;
         this.rng = new Random(wanderSeed);
     }

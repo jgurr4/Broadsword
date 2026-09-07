@@ -49,16 +49,20 @@ One unit of Link's health. Link dies when all three are gone.
 _Avoid_: HP, life
 
 **Magic**:
-A meter that depletes when Link casts a Spell.
+A meter that depletes when Link casts a Spell. Nothing in V1 spends it: the Magic Candle's Light runs on its own Fire charge instead.
 _Avoid_: mana, MP
 
 **Spell**:
 An ability that consumes Magic, cast from the Magic Candle's buttons. Finished game: three (Light, Magic Shield, Recipe). V1 has exactly one: Light.
 _Avoid_: attack, power, wand (the item is the Magic Candle)
 
+**Fire charge**:
+The Magic Candle's ammunition, and never Magic: Link holds exactly one, and entering any new screen hands him a fresh one. Casting Light spends it.
+_Avoid_: magic, cooldown, spell slot
+
 **Light**:
-The spell cast by the Magic Candle. Sends a flame two tiles in front of Link; lights a Dark screen (until the dungeon resets), burns an enemy, or burns down a Flammable tree.
-_Avoid_: fire, torch, candle (the item is the Magic Candle)
+The spell cast by the Magic Candle, paid for with the Fire charge. Sends a flame two tiles in front of Link; lights a Dark screen (until the dungeon resets), burns an enemy, or burns down a Flammable tree.
+_Avoid_: torch, candle (the item is the Magic Candle); "Fire" alone means the Fire charge, not the spell
 
 **Sword**:
 Link's melee weapon; a swing hits the tile Link faces.
@@ -132,7 +136,7 @@ A hidden transport revealed by burning a Secret tree; in V1 they lead to the Old
 _Avoid_: door (a door is visible and permanent), portal
 
 **Cave**:
-A small room not part of the overworld grid. Two kinds: secret caves, reached by burning a Secret tree (V1: the Old woman's), and formation caves, entered through a hole in a large rock formation (Rockfield/Mountain). In V1 they hold nothing; later they hold unique merchants and items.
+One dark screen not part of the overworld grid: floor on every tile, solid walls on all four sides, no enemies. Two kinds: secret caves, reached by burning a Secret tree (V1: the Old woman's), and formation caves, entered through a hole in a large rock formation (Rockfield/Mountain). In V1 they hold nothing; later they hold unique merchants and items.
 _Avoid_: hut, grotto, dungeon (a dungeon is a full boss map)
 
 **Door**:

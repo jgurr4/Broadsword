@@ -23,8 +23,7 @@ public class World implements Terrain {
     /** Cave entry tile (below it sits the exit stairs, in the wall). */
     public static final int CAVE_ENTRY_TX = 8, CAVE_ENTRY_TY = 1;
 
-    /** Rock-formation cave room: a 4x3 interior, Link enters at ENTRY, exit stairs one step south. */
-    public static final int ROCK_CAVE_X0 = 6, ROCK_CAVE_X1 = 9, ROCK_CAVE_Y0 = 3, ROCK_CAVE_Y1 = 5;
+    /** Rock-formation cave room: one full screen, rock walls, Link enters at ENTRY. */
     public static final int ROCK_CAVE_ENTRY_TX = 8, ROCK_CAVE_ENTRY_TY = 3;
 
     public static final int SPAWN_SX = 20;
@@ -69,39 +68,32 @@ public class World implements Terrain {
         // tile only becomes walkable when the tree burns.
         if (secretTree != null && secretTree.sx() >= 0) {
             caves.putIfAbsent(packCave(secretTree.sx(), secretTree.sy(), secretTree.tx(), secretTree.ty()),
-                    new Cave(secretTree, buildCave(), CAVE_ENTRY_TX, CAVE_ENTRY_TY, null));
+                    new Cave(secretTree, buildCaveRoom(CAVE_ENTRY_TX, CAVE_ENTRY_TY),
+                            CAVE_ENTRY_TX, CAVE_ENTRY_TY));
         }
     }
 
-    /** The Old woman's Cave: a walled off-grid room with the return stairs in the south wall. */
-    private static Screen buildCave() {
+    /**
+     * A cave room: one full screen, ROCK on every border tile, dark cave floor
+     * everywhere else, and the return STAIRS one step south of the entry tile.
+     * Never any enemies.
+     */
+    static Screen buildCaveRoom(int entryTx, int entryTy) {
         Screen s = new Screen();
-        for (int x = 0; x < World.SCREEN_W; x++) {
+        for (int x = 0; x < SCREEN_W; x++) {
             s.set(x, 0, Tile.ROCK);
-            s.set(x, World.SCREEN_H - 1, Tile.ROCK);
+            s.set(x, SCREEN_H - 1, Tile.ROCK);
         }
-        for (int y = 0; y < World.SCREEN_H; y++) {
+        for (int y = 0; y < SCREEN_H; y++) {
             s.set(0, y, Tile.ROCK);
-            s.set(World.SCREEN_W - 1, y, Tile.ROCK);
+            s.set(SCREEN_W - 1, y, Tile.ROCK);
         }
-        s.set(World.CAVE_ENTRY_TX, World.SCREEN_H - 1, Tile.STAIRS);
-        return s;
-    }
-
-    /** A rock-formation cave room: solid rock with a 4x3 grass interior and exit stairs inside it. */
-    static Screen buildRockCaveRoom() {
-        Screen s = new Screen();
-        for (int y = 0; y < World.SCREEN_H; y++) {
-            for (int x = 0; x < World.SCREEN_W; x++) {
-                s.set(x, y, Tile.ROCK);
+        for (int y = 1; y < SCREEN_H - 1; y++) {
+            for (int x = 1; x < SCREEN_W - 1; x++) {
+                s.set(x, y, Tile.CAVE_FLOOR);
             }
         }
-        for (int y = ROCK_CAVE_Y0; y <= ROCK_CAVE_Y1; y++) {
-            for (int x = ROCK_CAVE_X0; x <= ROCK_CAVE_X1; x++) {
-                s.set(x, y, Tile.GRASS);
-            }
-        }
-        s.set(ROCK_CAVE_ENTRY_TX, ROCK_CAVE_ENTRY_TY + 1, Tile.STAIRS);
+        s.set(entryTx, entryTy + 1, Tile.STAIRS);
         return s;
     }
 

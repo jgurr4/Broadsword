@@ -42,8 +42,6 @@ class RockCaveTest {
             for (int key : a.caves().keySet()) {
                 Cave ca = a.caves().get(key), cb = b.caves().get(key);
                 assertEquals(ca.entry(), cb.entry());
-                assertEquals(ca.enemy() == null ? null : ca.enemy().kind(),
-                        cb.enemy() == null ? null : cb.enemy().kind());
                 for (int y = 0; y < World.SCREEN_H; y++) {
                     for (int x = 0; x < World.SCREEN_W; x++) {
                         assertEquals(ca.room().get(x, y), cb.room().get(x, y));
@@ -66,38 +64,27 @@ class RockCaveTest {
     }
 
     @Test
-    void everyRockCaveRoomIsWalledFourByThreeWithExitStairs() {
+    void everyRockCaveRoomIsOneDarkScreenWalledInWithExitStairs() {
         for (long seed : SAMPLE) {
             for (Cave c : rockCaves(WorldGenerator.generate(seed))) {
                 Screen r = c.room();
-                // interior: 4x3 walkable, centered, with the entry tile inside it
-                for (int y = World.ROCK_CAVE_Y0; y <= World.ROCK_CAVE_Y1; y++) {
-                    for (int x = World.ROCK_CAVE_X0; x <= World.ROCK_CAVE_X1; x++) {
-                        assertTrue(r.get(x, y).walkable, "seed " + seed + " interior (" + x + "," + y + ")");
-                    }
-                }
                 assertEquals(World.ROCK_CAVE_ENTRY_TX, c.entryTx());
                 assertEquals(World.ROCK_CAVE_ENTRY_TY, c.entryTy());
                 assertEquals(Tile.STAIRS, r.get(c.entryTx(), c.entryTy() + 1), "exit stairs one step south");
                 // walled in: no walkable tile on the room's border
                 for (int x = 0; x < World.SCREEN_W; x++) {
-                    assertFalse(r.get(x, 0).walkable);
-                    assertFalse(r.get(x, World.SCREEN_H - 1).walkable);
+                    assertEquals(Tile.ROCK, r.get(x, 0), "seed " + seed + " south wall");
+                    assertEquals(Tile.ROCK, r.get(x, World.SCREEN_H - 1), "seed " + seed + " north wall");
                 }
                 for (int y = 0; y < World.SCREEN_H; y++) {
-                    assertFalse(r.get(0, y).walkable);
-                    assertFalse(r.get(World.SCREEN_W - 1, y).walkable);
+                    assertEquals(Tile.ROCK, r.get(0, y), "seed " + seed + " west wall");
+                    assertEquals(Tile.ROCK, r.get(World.SCREEN_W - 1, y), "seed " + seed + " east wall");
                 }
-                // at most one enemy, and it is an Octorock inside the interior
-                if (c.enemy() != null) {
-                    assertEquals(EnemyKind.OCTOROCK, c.enemy().kind(), "seed " + seed);
-                    assertTrue(r.get(c.enemy().tx(), c.enemy().ty()).walkable, "enemy stands on floor");
-                }
-                // no other content: the room holds only rock, floor, and the exit stairs
-                for (int y = 0; y < World.SCREEN_H; y++) {
-                    for (int x = 0; x < World.SCREEN_W; x++) {
+                // the whole interior is dark cave floor apart from the exit stairs
+                for (int y = 1; y < World.SCREEN_H - 1; y++) {
+                    for (int x = 1; x < World.SCREEN_W - 1; x++) {
                         Tile t = r.get(x, y);
-                        assertTrue(t == Tile.ROCK || t == Tile.GRASS || t == Tile.STAIRS,
+                        assertTrue(t == Tile.CAVE_FLOOR || t == Tile.STAIRS,
                                 "seed " + seed + " unexpected tile " + t + " at " + x + "," + y);
                     }
                 }
@@ -186,17 +173,9 @@ class RockCaveTest {
     }
 
     @Test
-    void caveHasAtMostOneOctorockAndItIsLiveOnEntry() {
-        boolean sawOne = false, sawZero = false;
+    void cavesHaveNoEnemies() {
         for (long seed : SAMPLE) {
             java.util.List<Cave> caves = rockCaves(WorldGenerator.generate(seed));
-            for (Cave c : caves) {
-                if (c.enemy() != null) {
-                    sawOne = true;
-                } else {
-                    sawZero = true;
-                }
-            }
             if (caves.isEmpty()) {
                 continue;
             }
@@ -205,10 +184,12 @@ class RockCaveTest {
             atCaveEntrance(c, sim.world(), sim);
             step(sim, sim.link().facing);
             assertTrue(sim.inCave());
-            long live = sim.enemies().stream().filter(e -> e.alive).count();
-            assertEquals(c.enemy() == null ? 0 : 1, live, "seed " + seed + ": cave enemy count");
+            assertEquals(0, sim.enemies().size(), "seed " + seed + ": a cave holds nothing");
+            for (int i = 0; i < 40; i++) {
+                sim.tick(Sim.ENEMY_STEP_INTERVAL, null);
+            }
+            assertEquals(0, sim.enemies().size(), "seed " + seed + ": nothing spawns inside a cave");
         }
-        assertTrue(sawOne && sawZero, "sample should include guarded and empty caves");
     }
 
     @Test
@@ -247,10 +228,9 @@ class RockCaveTest {
     }
 
     @Test
-    void caveEnemiesAndProjectilesStayInsideTheRoom() {
+    void linkCannotWalkThroughTheCaveWalls() {
         for (long seed : SAMPLE) {
-            java.util.List<Cave> caves = rockCaves(WorldGenerator.generate(seed)).stream()
-                    .filter(c -> c.enemy() != null).toList();
+            java.util.List<Cave> caves = rockCaves(WorldGenerator.generate(seed));
             if (caves.isEmpty()) {
                 continue;
             }
@@ -258,19 +238,16 @@ class RockCaveTest {
             Cave c = caves.get(0);
             atCaveEntrance(c, sim.world(), sim);
             step(sim, sim.link().facing);
-            // let the Octorock run: it must never leave the 4x3 interior
-            for (int i = 0; i < 200; i++) {
-                sim.tick(Sim.ENEMY_STEP_INTERVAL, null);
-                for (Enemy e : sim.enemies()) {
-                    if (!e.alive || Sim.spawning(e)) {
-                        continue;
-                    }
-                    assertTrue(e.tx >= World.ROCK_CAVE_X0 && e.tx <= World.ROCK_CAVE_X1
-                                    && e.ty >= World.ROCK_CAVE_Y0 && e.ty <= World.ROCK_CAVE_Y1,
-                            "seed " + seed + ": Octorock escaped the room at " + e.tx + "," + e.ty);
-                }
+            assertTrue(sim.inCave());
+            // walk north until nothing moves: Link must stop against the wall
+            for (int i = 0; i < World.SCREEN_H + 2; i++) {
+                sim.tick(Sim.STEP_INTERVAL, Link.Dir.UP);
             }
-            return; // one guarded cave exercised is enough
+            assertTrue(sim.inCave(), "seed " + seed + ": the walls hold");
+            assertTrue(sim.link().ty > 0 && sim.link().ty < World.SCREEN_H - 1
+                    && sim.link().tx > 0 && sim.link().tx < World.SCREEN_W - 1,
+                    "seed " + seed + ": Link stayed inside the room at " + sim.link().tx + "," + sim.link().ty);
+            return; // one cave exercised is enough
         }
     }
 }

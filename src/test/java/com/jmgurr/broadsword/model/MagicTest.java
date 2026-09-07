@@ -47,6 +47,13 @@ class MagicTest {
         return e;
     }
 
+    /** Hold a direction until Link has taken {@code n} tile steps. */
+    private static void step(Sim sim, Link.Dir d, int n) {
+        for (int i = 0; i < n; i++) {
+            step(sim, d);
+        }
+    }
+
     /** Hold a direction long enough for Link to take one tile step. */
     private static void step(Sim sim, Link.Dir d) {
         for (int i = 0; i < 100; i++) {
@@ -65,17 +72,24 @@ class MagicTest {
     // ---- magic meter --------------------------------------------------------
 
     @Test
-    void magicStartsFullAndNeverRefills() {
+    void magicIsFullAndUntouchedByTheFire() {
         Sim sim = arenaRight();
         assertEquals(World.MAX_MAGIC, sim.magic());
-        for (int i = 0; i < World.MAX_MAGIC; i++) {
-            assertTrue(sim.castLight());
-        }
-        assertEquals(0, sim.magic());
-        assertFalse(sim.castLight(), "no Magic left: the cast is refused");
-        assertEquals(0, sim.magic());
+        assertTrue(sim.fireReady());
+        assertTrue(sim.castLight());
+        assertFalse(sim.fireReady(), "one cast per screen");
+        assertFalse(sim.castLight(), "no charge left on this screen");
 
-        // a death does not refill it
+        // entering another screen hands over a fresh charge
+        for (int y = 0; y < World.SCREEN_H; y++) {
+            sim.world().screen(World.SPAWN_SX + 1, World.SPAWN_SY).set(0, y, Tile.GRASS);
+        }
+        step(sim, Link.Dir.RIGHT, World.SCREEN_W - sim.link().tx + 1);
+        assertTrue(sim.fireReady(), "a new screen means a new charge");
+        assertTrue(sim.castLight());
+        assertEquals(World.MAX_MAGIC, sim.magic(), "the fire never spends Magic");
+
+        // nothing in V1 spends Magic any more: a death cannot "refill" what was never spent
         Link l = sim.link();
         while (sim.phase() == Sim.Phase.PLAYING) {
             l.hearts = 1;
@@ -84,7 +98,7 @@ class MagicTest {
             sim.enemies().clear();
         }
         sim.respawn();
-        assertEquals(0, sim.magic(), "respawn never refills Magic");
+        assertEquals(World.MAX_MAGIC, sim.magic());
     }
 
     // ---- Light spell ---------------------------------------------------------
@@ -201,13 +215,16 @@ class MagicTest {
     }
 
     @Test
-    void caveIsSafeAndLightIsWastedThere() {
+    void caveIsSafeAndEnteringItRefillsTheFireCharge() {
+        // atSecretStairs burns the tree, which spends this screen's charge
         Sim sim = atSecretStairs(4L);
+        assertFalse(sim.fireReady());
+        int m = sim.magic();
         step(sim, sim.link().facing);
         assertTrue(sim.inCave());
-        int m = sim.magic();
+        assertTrue(sim.fireReady(), "entering the cave is entering a new screen");
         assertTrue(sim.castLight());
-        assertEquals(m - 1, sim.magic(), "casting still costs Magic in the Cave");
+        assertEquals(m, sim.magic(), "the fire inside the cave still costs no Magic");
         sim.link().hearts = 1;
         sim.tick(Sim.ENEMY_STEP_INTERVAL * 3, null);
         assertEquals(Sim.Phase.PLAYING, sim.phase(), "nothing hurts Link in the Cave");
@@ -234,8 +251,8 @@ class MagicTest {
                 "the stairs stay revealed in the re-derived world");
         assertTrue(reloaded.inCave());
         assertEquals(sim.currentCave().entry(), reloaded.currentCave().entry(), "the same cave, from its key");
-        assertEquals(World.MAX_MAGIC - 2, s.magic(), "burn + one cast");
-        assertEquals(s.magic(), reloaded.magic(), "and Magic stays spent after reload");
+        assertEquals(World.MAX_MAGIC, s.magic(), "burning the tree and casting cost no Magic");
+        assertEquals(s.magic(), reloaded.magic(), "and Magic stays full after reload");
     }
 
     @Test
