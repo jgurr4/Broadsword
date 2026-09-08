@@ -63,6 +63,10 @@ public class GameScreen implements Screen {
         if (sim.phase() == Sim.Phase.GAME_OVER && Gdx.input.isKeyJustPressed(Input.Keys.R)) {
             sim.respawn();
         }
+        if (sim.won() && Gdx.input.isKeyJustPressed(Input.Keys.T)) {
+            game.setScreen(new TitleScreen(game)); // the autosave keeps the cleared dungeon
+            return;
+        }
         sim.tick(Math.min(delta, 0.1f), desired, swing);
         draw();
     }
@@ -205,6 +209,10 @@ public class GameScreen implements Screen {
                 b.setColor(flash);
             } else if (e.ethereal) {
                 b.draw(TextureGen.region(sprites, TextureGen.SPRITE_GHOST), ex, ey);
+            } else if (e.kind == com.jmgurr.broadsword.model.EnemyKind.HYDRA_BODY) {
+                b.draw(TextureGen.region(sprites, TextureGen.SPRITE_HYDRA_BODY), ex, ey);
+            } else if (e.kind == com.jmgurr.broadsword.model.EnemyKind.HYDRA_HEAD) {
+                b.draw(TextureGen.region(sprites, TextureGen.SPRITE_HYDRA_HEAD), ex, ey);
             } else {
                 int cell = e.kind == com.jmgurr.broadsword.model.EnemyKind.OCTOROCK ? 3 : 1;
                 b.draw(TextureGen.region(sprites, cell), ex, ey);
@@ -292,6 +300,20 @@ public class GameScreen implements Screen {
             b.draw(keySprite, 15, GameConfig.LOGICAL_H - 81);
         }
 
+        if (sim.won()) {
+            b.setColor(0f, 0f, 0.08f, 0.82f);
+            b.draw(TextureGen.region(ui, 2), 0, 0, GameConfig.LOGICAL_W, GameConfig.LOGICAL_H);
+            b.setColor(1, 1, 1, 1);
+            String[] lines = {
+                    "THE HYDRA FALLS", "The Triforce is yours.",
+                    "seed " + sim.world().seed(), "press T - return to title" };
+            float y = GameConfig.LOGICAL_H / 2f + 20;
+            for (String line : lines) {
+                layout.setText(font, line);
+                font.draw(b, layout, (GameConfig.LOGICAL_W - layout.width) / 2, y);
+                y -= 14;
+            }
+        }
         if (sim.phase() == Sim.Phase.GAME_OVER) {
             layout.setText(font, "GAME OVER");
             font.draw(b, "GAME OVER", (GameConfig.LOGICAL_W - layout.width) / 2, GameConfig.LOGICAL_H / 2f + 6);

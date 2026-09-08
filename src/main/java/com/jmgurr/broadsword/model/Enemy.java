@@ -29,8 +29,12 @@ public final class Enemy {
     public boolean alive = true;
     /** True after a sword hit; costs this enemy its next step. */
     public boolean stunned = false;
-    /** Octorock: seconds until the next Fireball may be fired. */
+    /** Octorock/Hydra head: seconds until the next Fireball may be fired. */
     public float fireTimer = 0;
+    /** Hydra head only: initial fire timer in seconds, staggered across heads. */
+    public float initialFireTimer = 0;
+    /** Boss (T11): fixed at its tile; no knockback, no stun, never moves. */
+    public boolean stationary = false;
     /** Seconds until this enemy materialises; while > 0 it is a harmless cloud. */
     public float spawning = 0;
     /** Deterministic per-enemy wander: seeded from world seed + screen + slot. */
@@ -51,5 +55,6 @@ public final class Enemy {
         this.fromTy = ty;
         this.hp = hp;
         this.rng = new Random(wanderSeed);
+        this.stationary = kind == EnemyKind.HYDRA_HEAD || kind == EnemyKind.HYDRA_BODY;
     }
 }

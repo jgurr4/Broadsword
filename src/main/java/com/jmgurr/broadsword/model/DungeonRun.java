@@ -22,6 +22,17 @@ public final class DungeonRun {
     /** screen index -> live block tiles, in authored order until first pushed. */
     private final Map<Integer, List<ScreenPos>> blocks = new HashMap<>();
     private final Set<Integer> triggered = new HashSet<>();
+    /** T11: the Hydra fell and the Triforce was claimed; the dungeon stays cleared. */
+    private boolean bossDefeated = false;
+
+    public boolean bossDefeated() {
+        return bossDefeated;
+    }
+
+    /** Idempotent: the Hydra stays dead across saves, deaths and revisits. */
+    public void markBossDefeated() {
+        bossDefeated = true;
+    }
 
     public int keys() {
         return keys;
@@ -99,12 +110,15 @@ public final class DungeonRun {
     }
 
     /** Restore persisted state (load); replaces everything. Blocks are not persisted. */
-    public void restore(int keys, int items, Iterable<Integer> opened, Iterable<Integer> taken) {
+    public void restore(int keys, int items, Iterable<Integer> opened, Iterable<Integer> taken,
+                        boolean bossDefeated) {
         this.keys = keys;
         this.items = items;
+        this.bossDefeated = bossDefeated;
         openedLocks.clear();
         takenLoot.clear();
         for (int i : opened) openedLocks.add(i);
         for (int i : taken) takenLoot.add(i);
+        triggered.clear();
     }
 }

@@ -114,6 +114,32 @@ public final class DungeonScreen {
         return boss;
     }
 
+    /** Hydra body tiles: the authored tile plus one wing each side. */
+    public List<ScreenPos> hydraBodyTiles() {
+        if (boss == null) return List.of();
+        int cx = boss.tx(), cy = boss.ty();
+        return List.of(new ScreenPos(0, 0, cx - 1, cy), boss, new ScreenPos(0, 0, cx + 1, cy));
+    }
+
+    /** Hydra head tiles: a row of three directly below the body. */
+    public List<ScreenPos> hydraHeadTiles() {
+        if (boss == null) return List.of();
+        int cx = boss.tx(), cy = boss.ty();
+        return List.of(new ScreenPos(0, 0, cx - 1, cy + 1), new ScreenPos(0, 0, cx, cy + 1),
+                new ScreenPos(0, 0, cx + 1, cy + 1));
+    }
+
+    /** The whole Hydra occupies its tiles like a wall: body and heads alike. */
+    public boolean blockedByHydra(int tx, int ty) {
+        for (ScreenPos p : hydraBodyTiles()) {
+            if (p.tx() == tx && p.ty() == ty) return true;
+        }
+        for (ScreenPos p : hydraHeadTiles()) {
+            if (p.tx() == tx && p.ty() == ty) return true;
+        }
+        return false;
+    }
+
     public List<Lootable> keys() {
         return keys;
     }

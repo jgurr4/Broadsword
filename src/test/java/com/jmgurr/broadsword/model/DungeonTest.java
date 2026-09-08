@@ -510,7 +510,7 @@ class DungeonTest {
     @Test
     void saveFormatRoundTripsDungeonFields() {
         SaveState s = new SaveState(42L, 1, 2, 3, 4, Link.Dir.UP, World.MAX_MAGIC, true,
-                SaveState.NO_CAVE, true, 3, true, Set.of(0, 1), Set.of(2, 4, 7));
+                SaveState.NO_CAVE, true, 3, true, Set.of(0, 1), Set.of(2, 4, 7), true);
         Optional<SaveState> back = SaveState.parse(s.format());
         assertEquals(Optional.of(s), back);
     }

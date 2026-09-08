@@ -12,35 +12,37 @@ import java.util.TreeSet;
  * doors and taken loot). The world itself re-derives from the seed; killed
  * enemies respawn per the save model.
  *
- * Text format, one key=value per line, version 5. Older saves load with the
+ * Text format, one key=value per line, version 6. Older saves load with the
  * dungeon fields defaulted (v1: no magic/secret; v2: cave was a boolean; v3:
- * no Flute; v4: no dungeon progress). No libgdx types: parsing is testable
- * headlessly; file I/O lives in the render layer.
+ * no Flute; v4: no dungeon progress; v5: no boss flag). No libgdx types:
+ * parsing is testable headlessly; file I/O lives in the render layer.
  */
 public record SaveState(long seed, int sx, int sy, int tx, int ty, Link.Dir facing,
         int magic, boolean secretRevealed, int caveKey, boolean fluteTaken,
-        int dungeonKeys, boolean inDungeon, Set<Integer> openedLocks, Set<Integer> takenLoot) {
+        int dungeonKeys, boolean inDungeon, Set<Integer> openedLocks, Set<Integer> takenLoot,
+        boolean bossDefeated) {
 
     /** {@code caveKey} values: -1 on the overworld; v2's "in the secret cave" marker. */
     public static final int NO_CAVE = -1;
     public static final int CAVE_SECRET_V2 = -2;
-    public static final int VERSION = 5;
+    public static final int VERSION = 6;
     static final int VERSION_V1 = 1;
     static final int VERSION_V2 = 2;
     static final int VERSION_V3 = 3;
     static final int VERSION_V4 = 4;
+    static final int VERSION_V5 = 5;
 
     /** A new run: full Magic, the Secret still hidden, no Flute, Link on the overworld. */
     public SaveState(long seed, int sx, int sy, int tx, int ty, Link.Dir facing) {
         this(seed, sx, sy, tx, ty, facing, World.MAX_MAGIC, false, NO_CAVE, false,
-                0, false, Set.of(), Set.of());
+                0, false, Set.of(), Set.of(), false);
     }
 
     /** A save without dungeon progress. */
     public SaveState(long seed, int sx, int sy, int tx, int ty, Link.Dir facing,
             int magic, boolean secretRevealed, int caveKey, boolean fluteTaken) {
         this(seed, sx, sy, tx, ty, facing, magic, secretRevealed, caveKey, fluteTaken,
-                0, false, Set.of(), Set.of());
+                0, false, Set.of(), Set.of(), false);
     }
 
     public String format() {
@@ -55,7 +57,8 @@ public record SaveState(long seed, int sx, int sy, int tx, int ty, Link.Dir faci
                 + "dungeon=" + (inDungeon ? 1 : 0) + "\n"
                 + "keys=" + dungeonKeys + "\n"
                 + "open=" + join(openedLocks) + "\n"
-                + "loot=" + join(takenLoot) + "\n";
+                + "loot=" + join(takenLoot) + "\n"
+                + "boss=" + (bossDefeated ? 1 : 0) + "\n";
     }
 
     /** Parse a save file. Any deviation (bad version, bad numbers, out-of-world position) is corrupt. */
@@ -75,6 +78,7 @@ public record SaveState(long seed, int sx, int sy, int tx, int ty, Link.Dir faci
         Integer keys = null;
         Set<Integer> open = null;
         Set<Integer> loot = null;
+        Boolean boss = null;
         for (String line : text.split("\\R")) {
             int eq = line.indexOf('=');
             if (eq < 0) {
@@ -105,6 +109,7 @@ public record SaveState(long seed, int sx, int sy, int tx, int ty, Link.Dir faci
                     case "keys" -> keys = Integer.parseInt(value);
                     case "open" -> open = idList(value);
                     case "loot" -> loot = idList(value);
+                    case "boss" -> boss = flag(value);
                     default -> {
                     }
                 }
@@ -115,8 +120,8 @@ public record SaveState(long seed, int sx, int sy, int tx, int ty, Link.Dir faci
         if (version == null || seed == null || link == null || facing == null) {
             return Optional.empty();
         }
-        boolean known = version == VERSION || version == VERSION_V4 || version == VERSION_V3
-                || version == VERSION_V2 || version == VERSION_V1;
+        boolean known = version == VERSION || version == VERSION_V5 || version == VERSION_V4
+                || version == VERSION_V3 || version == VERSION_V2 || version == VERSION_V1;
         if (!known || !World.inWorld(link[0], link[1])
                 || link[2] < 0 || link[2] >= World.SCREEN_W
                 || link[3] < 0 || link[3] >= World.SCREEN_H) {
@@ -138,10 +143,12 @@ public record SaveState(long seed, int sx, int sy, int tx, int ty, Link.Dir faci
             return Optional.empty();
         }
         // v4 and older saves predate the dungeon: no keys, not inside, nothing taken.
+        // v5 saves predate the Hydra: it is still alive.
         return Optional.of(new SaveState(seed, link[0], link[1], link[2], link[3], facing,
                 magicLeft, secret != null && secret, caveAt, flute != null && flute,
                 keys == null ? 0 : keys, dungeon != null && dungeon,
-                open == null ? Set.of() : open, loot == null ? Set.of() : loot));
+                open == null ? Set.of() : open, loot == null ? Set.of() : loot,
+                boss != null && boss));
     }
 
     private static String join(Set<Integer> ids) {

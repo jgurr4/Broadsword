@@ -28,6 +28,10 @@ public final class Sim {
     public static final int GRUNT_HP = 2;
     /** Sword hits to kill an Octorock. */
     public static final int OCTOROCK_HP = 2;
+    /** Sword hits to fell one Hydra head (tunable). */
+    public static final int HYDRA_HEAD_HP = 4;
+    /** Hydra head: seconds between Fireballs with all three heads up (tunable). */
+    public static final float HYDRA_FIRE_INTERVAL = 1.5f;
     /** Manhattan distance at which a Grunt switches from patrol to chase. */
     public static final int GRUNT_AGGRO_TILES = 8;
     /** Octorock: holds distance while the gap is within this... */
@@ -60,7 +64,7 @@ public final class Sim {
     public static final float GHOST_TOUCH_RADIUS = 0.5f;
 
     public enum Phase {
-        PLAYING, GAME_OVER
+        PLAYING, GAME_OVER, VICTORY
     }
 
     private final World world;
@@ -140,7 +144,8 @@ public final class Sim {
         for (int id : save.takenLoot()) {
             if (this.dungeon.isItemId(id)) itemsHeld++;
         }
-        this.dungeonRun.restore(save.dungeonKeys(), itemsHeld, save.openedLocks(), save.takenLoot());
+        this.dungeonRun.restore(save.dungeonKeys(), itemsHeld, save.openedLocks(), save.takenLoot(),
+                save.bossDefeated());
         this.inDungeon = save.inDungeon();
         if (save.secretRevealed()) {
             world.revealSecretStairs();
@@ -163,7 +168,8 @@ public final class Sim {
         return new SaveState(world.seed(), link.sx, link.sy, link.tx, link.ty, link.facing,
                 magic, secretRevealed, cave == null ? SaveState.NO_CAVE : World.packCave(
                         cave.entry().sx(), cave.entry().sy(), cave.entry().tx(), cave.entry().ty()), fluteTaken,
-                dungeonRun.keys(), inDungeon, dungeonRun.openedLocks(), dungeonRun.takenLoot());
+                dungeonRun.keys(), inDungeon, dungeonRun.openedLocks(), dungeonRun.takenLoot(),
+                dungeonRun.bossDefeated());
     }
 
     /**
@@ -190,8 +196,11 @@ public final class Sim {
     }
 
     public void tick(float delta, Link.Dir desired, boolean swing) {
-        if (phase != Phase.PLAYING) {
+        if (phase == Phase.GAME_OVER) {
             return; // game-over: the renderer shows the overlay and calls respawn()
+        }
+        if (phase == Phase.VICTORY) {
+            return; // victory: the renderer shows the overlay and takes over
         }
         if (desired != null && !interpolating && stepTimer >= STEP_INTERVAL) {
             int psx = link.sx, psy = link.sy;
@@ -248,6 +257,14 @@ public final class Sim {
             }
             if (e.spawning > 0) {
                 e.spawning = Math.max(0, e.spawning - delta);
+            } else if (e.kind == EnemyKind.HYDRA_HEAD) {
+                // fires down a clear cardinal lane; no cloud, no wander
+                if (e.fireTimer <= 0 && (e.tx == link.tx || e.ty == link.ty)
+                        && lineClear(e.tx, e.ty, link.tx, link.ty)) {
+                    fireballFrom(e);
+                } else {
+                    e.fireTimer = Math.max(0, e.fireTimer - delta);
+                }
             } else if (e.kind == EnemyKind.OCTOROCK) {
                 e.fireTimer = Math.max(0, e.fireTimer - delta);
             }
@@ -451,8 +468,10 @@ public final class Sim {
                     autosave(); // a burned tree is persistent world state
                 }
                 for (Enemy e : enemies) {
-                    // the closed list: Ghosts are not on it, and phase straight through
-                    if (e.alive && e.spawning <= 0 && !e.ethereal && e.tx == tx && e.ty == ty) {
+                    // the closed list: Ghosts are not on it, and phase straight through;
+                    // the Hydra stands on the list but takes nothing from Light (T11)
+                    if (e.alive && e.spawning <= 0 && !e.ethereal && !e.stationary
+                            && e.tx == tx && e.ty == ty) {
                         hit(e, link.facing); // knocked back along the beam
                     }
                 }
@@ -535,7 +554,10 @@ public final class Sim {
         } else if (!t.walkable) {
             return false;
         }
-        return !blockOccupies(tx, ty);
+        if (!dungeonRun.bossDefeated() && s.blockedByHydra(tx, ty)) {
+            return false; // the Hydra stands on floor tiles like a wall
+        }
+        return !blockOccupies(tx, ty) && !enemyOccupies(tx, ty);
     }
 
     /** A shoveable block occupies its tile like a wall: nothing walks through. */
@@ -584,7 +606,7 @@ public final class Sim {
                 Tile far = (fx >= 0 && fx < World.SCREEN_W && fy >= 0 && fy < World.SCREEN_H)
                         ? s.grid().get(fx, fy) : Tile.DUNGEON_WALL;
                 if (!far.walkable || far == Tile.DOOR || far == Tile.DUNGEON_EXIT
-                        || blockOccupies(fx, fy) || enemyOccupies(fx, fy) || lootAt(fx, fy)) {
+                        || blockOccupies(fx, fy) || lootAt(fx, fy)) {
                     return false; // blocked: the block stays put, so does Link
                 }
                 dungeonRun.pushBlock(dungeonScreenIndex(), s,
@@ -601,7 +623,7 @@ public final class Sim {
                     return false; // the door opens under the next step
                 }
             }
-            if (!t.walkable) return false;
+            if (!dungeonTileWalkable(s, nx, ny)) return false;
             link.tx = nx;
             link.ty = ny;
             return true;
@@ -848,8 +870,10 @@ public final class Sim {
         int hx = link.tx + blow.dx;
         int hy = link.ty + blow.dy;
         for (Enemy e : enemies) {
-            // the sword passes through a Ghost: it is not on the closed list
-            if (e.alive && e.spawning <= 0 && !e.ethereal && e.tx == hx && e.ty == hy) {
+            // the sword passes through a Ghost: it is not on the closed list;
+            // the Hydra body is scenery: only the heads take the blade
+            if (e.alive && e.spawning <= 0 && !e.ethereal && e.kind != EnemyKind.HYDRA_BODY
+                    && e.tx == hx && e.ty == hy) {
                 hit(e, blow);
             }
         }
@@ -857,6 +881,13 @@ public final class Sim {
 
     /** 1 damage away from the blow ({@code blow} = the direction it travels). */
     private void hit(Enemy e, Link.Dir blow) {
+        if (e.stationary) {
+            e.hp -= 1; // a boss part never stuns or slides
+            if (e.hp <= 0) {
+                e.alive = false;
+            }
+            return;
+        }
         e.hp -= 1;
         if (e.hp <= 0) {
             e.alive = false;
@@ -887,8 +918,8 @@ public final class Sim {
     private void stepEnemies() {
         boolean hitNow = false;
         for (Enemy e : enemies) {
-            if (!e.alive || e.spawning > 0) {
-                continue; // a cloud neither moves nor hurts
+            if (!e.alive || e.spawning > 0 || e.stationary) {
+                continue; // a cloud and a boss part neither move nor crowd Link
             }
             if (e.kind == EnemyKind.GRUNT) {
                 stepGrunt(e);
@@ -902,6 +933,78 @@ public final class Sim {
         if (hitNow) {
             damageLink();
         }
+        checkHydraDown();
+    }
+
+    // ---- T11: the Hydra boss and the Triforce -----------------------------
+
+    /**
+     * Spawn the Hydra: an invulnerable three-tile body and three stationary
+     * heads with staggered fire timers. No spawn clouds: the boss is simply
+     * there when Link walks in.
+     */
+    private void placeHydra(DungeonScreen s) {
+        for (ScreenPos b : s.hydraBodyTiles()) {
+            enemies.add(new Enemy(EnemyKind.HYDRA_BODY, b.tx(), b.ty(),
+                    enemyHp(EnemyKind.HYDRA_BODY), 0L));
+        }
+        float stagger = hydraIntervalAt(3) / 3f; // heads fire in a round-robin
+        int slot = 0;
+        for (ScreenPos h : s.hydraHeadTiles()) {
+            Enemy head = new Enemy(EnemyKind.HYDRA_HEAD, h.tx(), h.ty(),
+                    enemyHp(EnemyKind.HYDRA_HEAD), 0L);
+            head.fireTimer = stagger * (slot++ + 1);
+            enemies.add(head);
+        }
+    }
+
+    /** Live Hydra heads on the boss screen. */
+    private int liveHeads() {
+        int n = 0;
+        for (Enemy e : enemies) {
+            if (e.alive && e.kind == EnemyKind.HYDRA_HEAD) n++;
+        }
+        return n;
+    }
+
+    /**
+     * The Hydra's fire clock escalates with the heads left: with n of 3 up,
+     * each head fires every HYDRA_FIRE_INTERVAL * n / 3 seconds.
+     */
+    private float hydraIntervalAt(int heads) {
+        return HYDRA_FIRE_INTERVAL * heads / 3f;
+    }
+
+    /** One Fireball aimed at Link along the head's clear cardinal lane. */
+    private void fireballFrom(Enemy e) {
+        int fdx = Integer.signum(link.tx - e.tx), fdy = Integer.signum(link.ty - e.ty);
+        Projectile p = new Projectile(e.tx + fdx, e.ty + fdy, fdx, fdy);
+        e.fireTimer = hydraIntervalAt(liveHeads());
+        if (p.tx == link.tx && p.ty == link.ty) {
+            hitLinkByProjectile(p); // point-blank: hit on the firing tile
+        } else {
+            projectiles.add(p);
+        }
+    }
+
+    /**
+     * All heads down: the body sinks, the Triforce is claimed (the autosave
+     * marks the dungeon cleared) and the run is won. Idempotent.
+     */
+    private void checkHydraDown() {
+        if (phase != Phase.PLAYING || dungeonRun.bossDefeated() || !inDungeon) return;
+        if (dungeonScreen().bossTile() == null || liveHeads() > 0) return;
+        boolean bodyWasHere = enemies.stream().anyMatch(e -> e.kind == EnemyKind.HYDRA_BODY);
+        if (!bodyWasHere) return;
+        dungeonRun.markBossDefeated();
+        enemies.removeIf(e -> e.kind == EnemyKind.HYDRA_BODY); // the body sinks with the heads
+        autosave(); // a piece collected autosaves before the victory screen shows
+        phase = Phase.VICTORY;
+    }
+
+    /** True when the run is won: the renderer shows the victory overlay. */
+    public boolean won() {
+        return phase == Phase.VICTORY;
     }
 
     /**
@@ -927,6 +1030,8 @@ public final class Sim {
         return switch (kind) {
             case OCTOROCK -> OCTOROCK_HP;
             case GHOST -> 1; // nothing damages a Ghost; the Flute dispels it outright
+            case HYDRA_HEAD -> HYDRA_HEAD_HP;
+            case HYDRA_BODY -> Integer.MAX_VALUE; // invulnerable scenery
             default -> GRUNT_HP;
         };
     }
@@ -1077,7 +1182,7 @@ public final class Sim {
      * around the placed tile, so a screen is never an ambush you can memorise.
      * Every enemy starts as a 2s spawning cloud, and never on Link's tile.
      */
-    private void placeScreenEnemies() {
+    void placeScreenEnemies() { // package-visible: tests place after a teleported screen change
         enemies.clear();
         projectiles.clear();
         if (inCave()) {
@@ -1086,14 +1191,24 @@ public final class Sim {
             return;
         }
         if (inDungeon) {
-            // authored enemies, exact tiles, spawning clouds; respawn every visit
             int key = screenKey(link.sx, link.sy);
+            if (dungeonRun.bossDefeated()) {
+                enemyScreenKey = ~key; // a cleared dungeon stays cleared: nothing respawns
+                return;
+            }
+            // authored enemies, exact tiles, spawning clouds; respawn every visit
             for (int slot = 0; slot < dungeonScreen().enemies().size(); slot++) {
                 EnemySpawn sp = dungeonScreen().enemies().get(slot);
+                if (dungeonScreen().blockedByHydra(sp.tx(), sp.ty())) {
+                    continue; // never bury an authored enemy inside the boss
+                }
                 long wanderSeed = world.usedSeed() * 1000003L + key * 31L + slot;
                 Enemy e = new Enemy(sp.kind(), sp.tx(), sp.ty(), enemyHp(sp.kind()), wanderSeed);
                 e.spawning = ENEMY_SPAWN_DURATION;
                 enemies.add(e);
+            }
+            if (dungeonScreen().bossTile() != null) {
+                placeHydra(dungeonScreen());
             }
             enemyScreenKey = ~key; // never equals an overworld key; re-placed per dungeon screen
             return;
@@ -1144,7 +1259,8 @@ public final class Sim {
             return;
         }
         link.hearts = World.MAX_HEARTS;
-        boolean inD = diedInDungeon;
+        // after the Hydra fell the dungeon is cleared: death there respawns on the overworld
+        boolean inD = diedInDungeon && !dungeonRun.bossDefeated();
         diedInDungeon = false;
         if (inD) {
             // dying inside the dungeon respawns at the dungeon entrance; run progress persists

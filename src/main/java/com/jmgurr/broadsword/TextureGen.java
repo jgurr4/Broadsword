@@ -263,6 +263,36 @@ public final class TextureGen {
                             c = new Color(0.3f, 0.29f, 0.36f, 1); // edge
                         }
                     }
+                    case 15 -> {
+                        // Hydra body: a low dark-green scaled mound
+                        if (lx >= 1 && lx <= 13 && ly >= 6 && ly <= 13) {
+                            c = new Color(0.16f, 0.42f, 0.22f, 1);
+                        }
+                        if (lx >= 3 && lx <= 11 && ly >= 3 && ly <= 7) {
+                            c = new Color(0.2f, 0.52f, 0.28f, 1); // hump
+                        }
+                        if ((lx + ly) % 4 == 0 && ly >= 6 && ly <= 12 && lx >= 2 && lx <= 12) {
+                            c = new Color(0.12f, 0.32f, 0.17f, 1); // scale speckles
+                        }
+                        if (ly == 13 || lx == 1 || lx == 13) {
+                            c = new Color(0.08f, 0.22f, 0.12f, 1); // edge
+                        }
+                    }
+                    case 16 -> {
+                        // Hydra head: green neck, open red-eyed jaw facing down
+                        if (lx >= 5 && lx <= 9 && ly >= 2 && ly <= 7) {
+                            c = new Color(0.2f, 0.5f, 0.26f, 1); // neck
+                        }
+                        if (lx >= 3 && lx <= 12 && ly >= 7 && ly <= 12) {
+                            c = new Color(0.24f, 0.58f, 0.3f, 1); // skull
+                        }
+                        if ((lx == 5 || lx == 10) && ly >= 8 && ly <= 9) {
+                            c = new Color(0.95f, 0.2f, 0.15f, 1); // eyes
+                        }
+                        if (lx >= 5 && lx <= 10 && (ly == 11 || ly == 12)) {
+                            c = new Color(0.85f, 0.85f, 0.6f, 1); // fangs
+                        }
+                    }
                     case 11 -> {
                         // Flute: a pale gold pipe lying on the ground
                         if (lx >= 3 && lx <= 11 && ly >= 6 && ly <= 8) {
@@ -294,8 +324,10 @@ public final class TextureGen {
         return new Texture(pm);
     }
 
-    /** Sprite strip cells: Link, Grunt, sword, Octorock, fireball, Link-left, sword-up, shield, cloud, Link-back, Ghost, Flute, Key, Chest, Block. */
-    public static final int SPRITE_CELLS = 15;
+    /** Sprite strip cells: Link, Grunt, sword, Octorock, fireball, Link-left, sword-up, shield, cloud, Link-back, Ghost, Flute, Key, Chest, Block, Hydra body, Hydra head. */
+    public static final int SPRITE_CELLS = 17;
+    public static final int SPRITE_HYDRA_BODY = 15;
+    public static final int SPRITE_HYDRA_HEAD = 16;
     public static final int SPRITE_BLOCK = 14;
     public static final int SPRITE_GHOST = 10;
     public static final int SPRITE_FLUTE = 11;
