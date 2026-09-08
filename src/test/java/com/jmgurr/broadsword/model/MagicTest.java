@@ -92,7 +92,7 @@ class MagicTest {
         // nothing in V1 spends Magic any more: a death cannot "refill" what was never spent
         Link l = sim.link();
         while (sim.phase() == Sim.Phase.PLAYING) {
-            l.hearts = 1;
+            l.hearts = Sim.ENEMY_DAMAGE; // one hit kills
             grunt(sim, l.tx + 1, l.ty);
             sim.tick(Sim.ENEMY_STEP_INTERVAL, null);
             sim.enemies().clear();
@@ -225,7 +225,7 @@ class MagicTest {
         assertTrue(sim.fireReady(), "entering the cave is entering a new screen");
         assertTrue(sim.castLight());
         assertEquals(m, sim.magic(), "the fire inside the cave still costs no Magic");
-        sim.link().hearts = 1;
+        sim.link().hearts = Sim.ENEMY_DAMAGE;
         sim.tick(Sim.ENEMY_STEP_INTERVAL * 3, null);
         assertEquals(Sim.Phase.PLAYING, sim.phase(), "nothing hurts Link in the Cave");
     }

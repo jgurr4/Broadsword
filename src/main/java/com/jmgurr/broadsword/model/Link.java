@@ -3,8 +3,8 @@ package com.jmgurr.broadsword.model;
 /** The hero. Position is always a tile coordinate; no physics. */
 public class Link {
 
-    /** Current health, 0..MAX_HEARTS; 0 means death. */
-    public int hearts = World.MAX_HEARTS;
+    /** Current health in half-Heart steps, 0..MAX_HEARTS; 0 means death. */
+    public float hearts = World.MAX_HEARTS;
 
     public enum Dir {
         // y-down data: +tx = right, +ty = down the screen

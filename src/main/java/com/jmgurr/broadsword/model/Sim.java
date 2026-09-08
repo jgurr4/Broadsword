@@ -22,6 +22,8 @@ public final class Sim {
     public static final float SWORD_SWING_DURATION = 0.2f;
     /** Invulnerability after contact damage. */
     public static final float I_FRAME_DURATION = 1.0f;
+    /** Hearts lost per enemy hit (contact or projectile). */
+    public static final float ENEMY_DAMAGE = 0.5f;
     /** Sword hits to kill a Grunt. */
     public static final int GRUNT_HP = 2;
     /** Sword hits to kill an Octorock. */
@@ -903,15 +905,15 @@ public final class Sim {
     }
 
     /**
-     * Take 1 Heart, obeying i-frames; 0 Hearts ends the run. Caves are always
-     * safe: they hold no enemies.
+     * Take {@link #ENEMY_DAMAGE} Hearts, obeying i-frames; 0 Hearts ends the
+     * run. Caves are always safe: they hold no enemies.
      */
     private void damageLink() {
         if (invulnTimer > 0 || (inCave() && world.isSecretTree(cave.entry().sx(), cave.entry().sy(),
                 cave.entry().tx(), cave.entry().ty()))) {
             return;
         }
-        link.hearts -= 1;
+        link.hearts -= ENEMY_DAMAGE;
         invulnTimer = I_FRAME_DURATION;
         if (link.hearts <= 0) {
             link.hearts = 0;

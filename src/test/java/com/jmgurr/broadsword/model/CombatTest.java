@@ -314,22 +314,22 @@ class CombatTest {
 
     @Test
     void startsWithThreeHearts() {
-        assertEquals(3, new Sim(1L).link().hearts);
+        assertEquals(3f, new Sim(1L).link().hearts, 0.001f);
     }
 
     @Test
-    void gruntContactCostsOneHeart() {
+    void gruntContactCostsHalfAHeart() {
         Sim sim = arenaAtSpawn();
         Link l = sim.link();
         grunt(sim, l.tx, l.ty);
 
         enemyStep(sim);
 
-        assertEquals(2, l.hearts);
+        assertEquals(2.5f, l.hearts, 0.001f);
     }
 
     @Test
-    void contactIsOneHeartPerTick() {
+    void contactIsOneDamageEventPerTick() {
         Sim sim = arenaAtSpawn();
         Link l = sim.link();
         grunt(sim, l.tx, l.ty);
@@ -337,7 +337,7 @@ class CombatTest {
 
         enemyStep(sim);
 
-        assertEquals(2, l.hearts, "i-frames: two Grunts on one tile cost one Heart");
+        assertEquals(2.5f, l.hearts, 0.001f, "i-frames: two Grunts on one tile cost one hit");
     }
 
     @Test
@@ -347,15 +347,15 @@ class CombatTest {
         grunt(sim, l.tx, l.ty);
 
         enemyStep(sim);
-        assertEquals(2, l.hearts);
+        assertEquals(2.5f, l.hearts, 0.001f);
 
         idle(sim, Sim.I_FRAME_DURATION * 0.4f);
         enemyStep(sim);
-        assertEquals(2, l.hearts, "still invulnerable");
+        assertEquals(2.5f, l.hearts, 0.001f, "still invulnerable");
 
         idle(sim, Sim.I_FRAME_DURATION);
         enemyStep(sim);
-        assertEquals(1, l.hearts);
+        assertEquals(2f, l.hearts, 0.001f);
     }
 
     @Test
@@ -363,12 +363,12 @@ class CombatTest {
         Sim sim = arenaAtSpawn();
         Link l = sim.link();
         grunt(sim, l.tx, l.ty);
-        for (int i = 0; i < 3; i++) {
+        for (int i = 0; i < 6; i++) {
             enemyStep(sim);
             idle(sim, Sim.I_FRAME_DURATION);
         }
         assertEquals(Sim.Phase.GAME_OVER, sim.phase());
-        assertEquals(0, l.hearts);
+        assertEquals(0f, l.hearts, 0.001f);
     }
 
     @Test
@@ -376,7 +376,7 @@ class CombatTest {
         Sim sim = arenaAtSpawn();
         Link l = sim.link();
         grunt(sim, l.tx, l.ty);
-        for (int i = 0; i < 3; i++) {
+        for (int i = 0; i < 6; i++) { // 3 Hearts / 0.5 per hit
             enemyStep(sim);
             idle(sim, Sim.I_FRAME_DURATION);
         }
@@ -526,7 +526,7 @@ class CombatTest {
         assertEquals(placed - 1, sim.enemies().stream().filter(e -> e.alive).count());
 
         grunt(sim, l.tx, l.ty);
-        for (int i = 0; i < 3; i++) {
+        for (int i = 0; i < 6; i++) { // 3 Hearts / 0.5 per hit
             enemyStep(sim);
             idle(sim, Sim.I_FRAME_DURATION);
         }

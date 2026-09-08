@@ -262,10 +262,18 @@ public class GameScreen implements Screen {
             }
             b.setColor(1, 1, 1, 1);
         }
-        // HUD: hearts top-left (filled vs. lost), magic below (both inset from the top edge)
+        // HUD: hearts top-left (full, half, or lost), magic below (both inset from the top edge)
         for (int i = 0; i < World.MAX_HEARTS; i++) {
-            drawUiCell(b, 0, 3 + i * 12, GameConfig.LOGICAL_H - 19,
-                    i < link.hearts ? com.badlogic.gdx.graphics.Color.WHITE : new com.badlogic.gdx.graphics.Color(0.3f, 0.3f, 0.3f, 1f));
+            float remain = link.hearts - i;
+            int cell = remain >= 1f ? 0 : (remain >= 0.5f ? 3 : -1);
+            if (cell < 0) {
+                drawUiCell(b, 0, 3 + i * 12, GameConfig.LOGICAL_H - 19,
+                        new com.badlogic.gdx.graphics.Color(0.3f, 0.3f, 0.3f, 1f));
+            } else {
+                b.setColor(com.badlogic.gdx.graphics.Color.WHITE);
+                b.draw(TextureGen.region(ui, cell), 3 + i * 12, GameConfig.LOGICAL_H - 19);
+                b.setColor(1, 1, 1, 1);
+            }
         }
         // Magic pips: spent by Spells, which V1 has none of, so they stay bright
         for (int i = 0; i < GameConfig.MAX_MAGIC; i++) {
@@ -295,10 +303,12 @@ public class GameScreen implements Screen {
         // screen:tiles and the direction the input layer sees
         World world = sim.world();
         com.jmgurr.broadsword.model.Landmark lm = world.landmarkAt(link.sx, link.sy);
-        String dbg = String.format("%s %d:%d %d:%d %s",
+        // dev helper: the dungeon entrance screen, so a new seed can be found quickly
+        com.jmgurr.broadsword.model.ScreenPos ent = world.dungeonEntrance();
+        String dbg = String.format("%s %d:%d %d:%d %s [dungeon %d,%d]",
                 lm != null ? lm.name() : world.archetype(link.sx, link.sy).name(),
                 link.sx, link.sy, link.tx, link.ty,
-                desired == null ? "-" : desired.name());
+                desired == null ? "-" : desired.name(), ent.sx(), ent.sy());
         layout.setText(font, dbg);
         // y-up camera: y is the text baseline; place by ascent so the glyph tops
         // sit 2px below the top edge, 4px in from the right edge

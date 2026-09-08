@@ -81,21 +81,21 @@ class GhostTest {
     }
 
     @Test
-    void ghostContactDrainsAHeartAndIframesApply() {
+    void ghostContactDrainsHalfAHeartAndIframesApply() {
         Sim sim = cemeterySim(2L);
         Link link = sim.link();
         link.hearts = World.MAX_HEARTS;
         Enemy g = spawnGhost(sim, link.tx + 1, link.ty);
-        int h0 = link.hearts;
+        float h0 = link.hearts;
         for (int i = 0; i < 100 && link.hearts == h0; i++) {
             sim.tick(0.05f, null);
         }
-        assertEquals(h0 - 1, link.hearts, "touch = 1 Heart");
+        assertEquals(h0 - Sim.ENEMY_DAMAGE, link.hearts, 0.001f, "touch = half a Heart");
         assertTrue(sim.invulnerable(), "i-frames after contact");
         g.fx = link.tx; // keep it touching, inside the i-frame window
         g.fy = link.ty;
         tick(sim, 0.4f);
-        assertEquals(h0 - 1, link.hearts, "i-frames swallow contact during the window");
+        assertEquals(h0 - Sim.ENEMY_DAMAGE, link.hearts, 0.001f, "i-frames swallow contact during the window");
     }
 
     @Test
@@ -271,7 +271,7 @@ class GhostTest {
         link.sy = f.sy();
         link.tx = f.tx() - 1;
         link.ty = World.LANE_Y;
-        link.hearts = 999;
+        link.hearts = 999f;
         for (int i = 0; i < 40 && !sim.hasFlute(); i++) {
             sim.tick(Sim.STEP_INTERVAL + 0.01f, Link.Dir.RIGHT);
         }

@@ -81,7 +81,7 @@ public final class TextureGen {
     }
 
     public static Texture ui() {
-        int w = 3 * GameConfig.TILE;
+        int w = 4 * GameConfig.TILE;
         Pixmap pm = new Pixmap(w, GameConfig.TILE, Pixmap.Format.RGBA8888);
         for (int x = 0; x < w; x++) {
             for (int y = 0; y < GameConfig.TILE; y++) {
@@ -92,10 +92,15 @@ public final class TextureGen {
                 switch (cell) {
                     case 0 -> c = heart(lx, ly) ? new Color(0.85f, 0.15f, 0.15f, 1) : Color.CLEAR;
                     case 1 -> c = (lx >= 4 && lx <= 10 && ly >= 4 && ly <= 10) ? new Color(0.2f, 0.5f, 0.95f, 1) : Color.CLEAR;
-                    default -> {
+                    case 2 -> {
                         int dx = Math.abs(lx - 7);
                         int dy = Math.abs(ly - 7);
                         c = (dy <= dx && dx + dy <= 8) ? new Color(0.95f, 0.8f, 0.2f, 1) : Color.CLEAR;
+                    }
+                    case 3 -> {
+                        // half Heart: the left half of the full Heart cell
+                        if (lx >= 7) break;
+                        c = heart(lx, ly) ? new Color(0.85f, 0.15f, 0.15f, 1) : Color.CLEAR;
                     }
                 }
                 pm.setColor(c);

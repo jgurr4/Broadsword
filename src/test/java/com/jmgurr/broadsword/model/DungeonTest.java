@@ -148,7 +148,7 @@ class DungeonTest {
         World w = sim.world();
         ScreenPos en = w.dungeonEntrance();
         assertTrue(w.isEntrance(en.sx(), en.sy(), en.tx(), en.ty()), "the entrance sits on the overworld");
-        sim.link().hearts = 1; // entry restores hearts like every other entrance
+        sim.link().hearts = Sim.ENEMY_DAMAGE; // one hit kills // entry restores hearts like every other entrance
 
         step(sim, Sim.opposite(home)); // step onto the entrance tile
 
@@ -185,7 +185,7 @@ class DungeonTest {
 
         step(sim, Link.Dir.LEFT); // onto the E tile
         assertTrue(sim.inDungeon(), "standing on the exit does not eject");
-        sim.link().hearts = 1;
+        sim.link().hearts = Sim.ENEMY_DAMAGE; // one hit kills
         step(sim, Link.Dir.LEFT); // and off the world again
 
         assertFalse(sim.inDungeon());
@@ -425,7 +425,7 @@ class DungeonTest {
         enter(sim);
         walkOnto(sim, 'k');
         Link l = sim.link();
-        l.hearts = 1;
+        l.hearts = Sim.ENEMY_DAMAGE; // one hit kills
         sim.enemies().add(new Enemy(EnemyKind.GRUNT, l.tx, l.ty, 1L));
         sim.tick(Sim.ENEMY_STEP_INTERVAL, null); // one contact kill
         assertEquals(Sim.Phase.GAME_OVER, sim.phase());
@@ -449,7 +449,7 @@ class DungeonTest {
         walkOnto(sim, 'k');
         sim.leaveDungeon();
         Link l = sim.link();
-        l.hearts = 1;
+        l.hearts = Sim.ENEMY_DAMAGE; // one hit kills
         sim.enemies().add(new Enemy(EnemyKind.GRUNT, l.tx, l.ty, 1L));
         sim.tick(Sim.ENEMY_STEP_INTERVAL, null);
         assertEquals(Sim.Phase.GAME_OVER, sim.phase());
@@ -470,7 +470,7 @@ class DungeonTest {
         reachLockedDoorB(sim);
         step(sim, Link.Dir.RIGHT); // spend the key on b's lock
         // and die inside
-        l.hearts = 1;
+        l.hearts = Sim.ENEMY_DAMAGE; // one hit kills
         sim.enemies().clear();
         sim.enemies().add(new Enemy(EnemyKind.GRUNT, l.tx, l.ty, 1L));
         sim.tick(Sim.ENEMY_STEP_INTERVAL, null);

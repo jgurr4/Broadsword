@@ -193,14 +193,14 @@ class RangedCombatTest {
     // ---- fireball: damage ----------------------------------------------------
 
     @Test
-    void fireballDealsOneHeartOnContact() {
+    void fireballDealsHalfAHeartOnContact() {
         Sim sim = arena(new Sim(1L), 5, 5);
         sim.link().facing = Link.Dir.UP; // no shield: shot arrives from the left
         fireballAt(sim, 4, 5, 1, 0);
 
         projectileStep(sim); // onto Link's tile
 
-        assertEquals(2, sim.link().hearts);
+        assertEquals(2.5f, sim.link().hearts, 0.001f);
         assertEquals(0, liveProjectiles(sim), "the fireball dies on impact");
     }
 
@@ -215,7 +215,7 @@ class RangedCombatTest {
 
         assertFalse(rock.alive, "absorbed by the obstacle");
         assertFalse(edge.alive, "leaves the screen");
-        assertEquals(3, sim.link().hearts, "neither touched Link");
+        assertEquals(3f, sim.link().hearts, 0.001f, "neither touched Link");
     }
 
     // ---- shield: facing matrix -----------------------------------------------
@@ -228,7 +228,7 @@ class RangedCombatTest {
 
         projectileStep(sim);
 
-        assertEquals(3, sim.link().hearts, "blocked");
+        assertEquals(3f, sim.link().hearts, 0.001f, "blocked");
         assertFalse(p.alive, "destroyed on impact, no reflect: nothing bounces back");
         assertEquals(0, liveProjectiles(sim));
     }
@@ -243,7 +243,7 @@ class RangedCombatTest {
 
         projectileStep(sim);
 
-        assertEquals(2, sim.link().hearts, "swing at the wrong moment: Link takes the hit");
+        assertEquals(2.5f, sim.link().hearts, 0.001f, "swing at the wrong moment: Link takes the hit");
         assertFalse(p.alive);
     }
 
@@ -256,7 +256,7 @@ class RangedCombatTest {
 
             projectileStep(sim);
 
-            assertEquals(2, sim.link().hearts, facing + ": side-arriving projectiles still hit");
+            assertEquals(2.5f, sim.link().hearts, 0.001f, facing + ": side-arriving projectiles still hit");
             assertFalse(p.alive);
         }
     }
@@ -267,16 +267,16 @@ class RangedCombatTest {
         sim.link().facing = Link.Dir.UP;
         fireballAt(sim, 4, 5, 1, 0);
         projectileStep(sim);
-        assertEquals(2, sim.link().hearts);
+        assertEquals(2.5f, sim.link().hearts, 0.001f);
 
         fireballAt(sim, 4, 5, 1, 0); // immediately after, still i-framed
         projectileStep(sim);
-        assertEquals(2, sim.link().hearts, "i-frames absorb the second hit");
+        assertEquals(2.5f, sim.link().hearts, 0.001f, "i-frames absorb the second hit");
 
         sim.tick(Sim.I_FRAME_DURATION, null);
         fireballAt(sim, 4, 5, 1, 0);
         projectileStep(sim);
-        assertEquals(1, sim.link().hearts, "after i-frames expire, the next hit lands");
+        assertEquals(2f, sim.link().hearts, 0.001f, "after i-frames expire, the next hit lands");
     }
 
     // ---- generator roster -----------------------------------------------------
