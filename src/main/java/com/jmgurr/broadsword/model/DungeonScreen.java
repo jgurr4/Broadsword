@@ -7,7 +7,7 @@ import java.util.Map;
 /**
  * One authored dungeon screen: an all-walled tile grid (except authored doors)
  * plus the entities placed on it. Static data; mutable run state (keys held,
- * doors opened, loot taken) lives in {@link DungeonRun}.
+ * doors opened, loot taken, block positions) lives in {@link DungeonRun}.
  */
 public final class DungeonScreen {
 
@@ -27,12 +27,15 @@ public final class DungeonScreen {
     private final ScreenPos boss; // hydra tile (T11 spawns it), or null
     private final List<Lootable> keys;
     private final List<Lootable> items;
+    private final List<Lootable> hidden; // revealed by a block trigger, then contact pickup
     private final List<EnemySpawn> enemies;
-    private final List<ScreenPos> blocks; // stored for T10; inert in T9
+    private final List<ScreenPos> blocks; // authored start positions
+    private final Map<ScreenPos, Lootable> triggers; // authored block tile -> hidden loot
 
     DungeonScreen(String id, Screen grid, boolean dark, Map<Link.Dir, Door> doors,
                   ScreenPos exit, ScreenPos boss, List<Lootable> keys, List<Lootable> items,
-                  List<EnemySpawn> enemies, List<ScreenPos> blocks) {
+                  List<Lootable> hidden, List<EnemySpawn> enemies, List<ScreenPos> blocks,
+                  Map<ScreenPos, Lootable> triggers) {
         this.id = id;
         this.grid = grid;
         this.dark = dark;
@@ -41,18 +44,23 @@ public final class DungeonScreen {
         this.boss = boss;
         this.keys = keys;
         this.items = items;
+        this.hidden = hidden;
         this.enemies = enemies;
         this.blocks = blocks;
+        this.triggers = triggers;
     }
 
     static DungeonScreen of(String id, Screen grid, boolean dark, ScreenPos exit, ScreenPos boss,
-                            List<Lootable> keys, List<Lootable> items,
-                            List<EnemySpawn> enemies, List<ScreenPos> blocks) {
-        return new DungeonScreen(id, grid, dark, Map.of(), exit, boss, keys, items, enemies, blocks);
+                            List<Lootable> keys, List<Lootable> items, List<Lootable> hidden,
+                            List<EnemySpawn> enemies, List<ScreenPos> blocks,
+                            Map<ScreenPos, Lootable> triggers) {
+        return new DungeonScreen(id, grid, dark, Map.of(), exit, boss, keys, items, hidden,
+                enemies, blocks, triggers);
     }
 
     DungeonScreen withDoors(Map<Link.Dir, Door> doors) {
-        return new DungeonScreen(id, grid, dark, Map.copyOf(doors), exit, boss, keys, items, enemies, blocks);
+        return new DungeonScreen(id, grid, dark, Map.copyOf(doors), exit, boss, keys, items,
+                hidden, enemies, blocks, triggers);
     }
 
     /** Assign globally-unique ids to this screen's loot (parse pass 1). */
@@ -61,7 +69,18 @@ public final class DungeonScreen {
         for (Lootable l : keys) k.add(new Lootable(nextId[0]++, l.tx(), l.ty()));
         List<Lootable> i = new ArrayList<>();
         for (Lootable l : items) i.add(new Lootable(nextId[0]++, l.tx(), l.ty()));
-        return new DungeonScreen(id, grid, dark, doors, exit, boss, List.copyOf(k), List.copyOf(i), enemies, blocks);
+        List<Lootable> h = new ArrayList<>();
+        for (Lootable l : hidden) h.add(new Lootable(nextId[0]++, l.tx(), l.ty()));
+        Map<ScreenPos, Lootable> t = new java.util.LinkedHashMap<>();
+        for (Map.Entry<ScreenPos, Lootable> e : triggers.entrySet()) {
+            Lootable loc = e.getValue();
+            // find the id assigned to this hidden loot by matching its tile
+            Lootable withId = h.stream()
+                    .filter(x -> x.tx() == loc.tx() && x.ty() == loc.ty()).findFirst().orElse(loc);
+            t.put(e.getKey(), withId);
+        }
+        return new DungeonScreen(id, grid, dark, doors, exit, boss, List.copyOf(k), List.copyOf(i),
+                List.copyOf(h), enemies, blocks, Map.copyOf(t));
     }
 
     public String id() {
@@ -72,7 +91,7 @@ public final class DungeonScreen {
         return grid;
     }
 
-    /** Authored dark screen; lighting is T10, flag stored now. */
+    /** Authored dark screen: obscured until Light is cast in it for this visit. */
     public boolean dark() {
         return dark;
     }
@@ -103,7 +122,17 @@ public final class DungeonScreen {
         return items;
     }
 
-    /** Shoveable block positions (T10 behaviour); parsed and stored in T9. */
+    /** Loot hidden behind a block trigger; visible and pickable once triggered. */
+    public List<Lootable> hiddenLoot() {
+        return hidden;
+    }
+
+    /** Authored block start tile -> the hidden loot its first push reveals. */
+    public Map<ScreenPos, Lootable> triggers() {
+        return triggers;
+    }
+
+    /** Authored block start positions. Live positions live on {@link DungeonRun}. */
     public List<ScreenPos> blocks() {
         return blocks;
     }

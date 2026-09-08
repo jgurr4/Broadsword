@@ -112,6 +112,11 @@ public final class Sim {
     private final DungeonRun dungeonRun = new DungeonRun();
     private boolean inDungeon;
     private boolean diedInDungeon;
+    /**
+     * Dungeon screens lit by Light during the current visit; cleared on every
+     * entry and exit (dark screens reset on re-entry per the keep-vs-reset table).
+     */
+    private final java.util.Set<Integer> litScreens = new java.util.HashSet<>();
 
     /** A new game: fresh world from the seed, Link at spawn. */
     public Sim(long seed) {
@@ -427,6 +432,9 @@ public final class Sim {
         fireReady = false;
         lightFxTimer = LIGHT_FX_DURATION;
         lightFxFacing = link.facing;
+        if (inDungeon) {
+            lightDungeonScreen(); // a Dark screen is lit for the rest of the visit
+        }
         if (!inCave()) {
             for (int i = 1; i <= LIGHT_RANGE; i++) {
                 int tx = link.tx + link.facing.dx * i;
@@ -434,7 +442,8 @@ public final class Sim {
                 if (tx < 0 || tx >= World.SCREEN_W || ty < 0 || ty >= World.SCREEN_H) {
                     continue; // the beam leaves the screen; the next screen is not simulated
                 }
-                Tile tile = world.screen(link.sx, link.sy).get(tx, ty);
+                Tile tile = inDungeon ? dungeonScreen().grid().get(tx, ty)
+                        : world.screen(link.sx, link.sy).get(tx, ty);
                 if (tile == Tile.FLAMMABLE_TREE) {
                     burn(link.sx, link.sy, tx, ty);
                     autosave(); // a burned tree is persistent world state
@@ -493,21 +502,7 @@ public final class Sim {
 
     /** Enter through the overworld entrance without walking onto it (tests). */
     void enterDungeon() {
-        DungeonScreen entry = dungeon.entry();
-        ScreenPos e = entry.exitTile();
-        Link.Dir inward = entry.exitInward();
-        inDungeon = true;
-        link.sx = dungeon.indexOf(entry.id());
-        link.sy = 0;
-        link.tx = e.tx() + inward.dx;
-        link.ty = e.ty() + inward.dy;
-        link.facing = inward;
-        link.hearts = World.MAX_HEARTS; // like every entrance, arriving restores Hearts
-        interpolating = false;
-        fireReady = true;
-        newScreenVisit();
-        placeScreenEnemies();
-        autosave();
+        enterDungeonFromOverworld();
     }
 
     /** Step out of the dungeon onto the overworld, beside the entrance (tests). */
@@ -531,9 +526,36 @@ public final class Sim {
 
     private boolean dungeonTileWalkable(DungeonScreen s, int tx, int ty) {
         Tile t = s.grid().get(tx, ty);
-        if (t != Tile.DOOR) return t.walkable;
-        Map.Entry<Link.Dir, DungeonScreen.Door> at = s.doorAt(tx, ty);
-        return at == null || !at.getValue().locked() || dungeonRun.isOpen(at.getValue().lockId());
+        if (t == Tile.DOOR) {
+            Map.Entry<Link.Dir, DungeonScreen.Door> at = s.doorAt(tx, ty);
+            if (at != null && at.getValue().locked() && !dungeonRun.isOpen(at.getValue().lockId()))
+                return false;
+        } else if (!t.walkable) {
+            return false;
+        }
+        return !blockOccupies(tx, ty);
+    }
+
+    /** A shoveable block occupies its tile like a wall: nothing walks through. */
+    private boolean blockOccupies(int tx, int ty) {
+        return dungeonRun.blocks(dungeonScreenIndex(), dungeonScreen()).stream()
+                .anyMatch(p -> p.tx() == tx && p.ty() == ty);
+    }
+
+    /** Undismissed loot on the tile (keys, chests, revealed hidden loot): a block never covers it. */
+    private boolean lootAt(int tx, int ty) {
+        DungeonScreen s = dungeonScreen();
+        for (Lootable l : s.keys()) {
+            if (!dungeonRun.taken(l.id()) && l.tx() == tx && l.ty() == ty) return true;
+        }
+        for (Lootable l : s.items()) {
+            if (!dungeonRun.taken(l.id()) && l.tx() == tx && l.ty() == ty) return true;
+        }
+        for (Lootable l : s.hiddenLoot()) {
+            // hidden or revealed, loot is never shoveled under a block
+            if (!dungeonRun.taken(l.id()) && l.tx() == tx && l.ty() == ty) return true;
+        }
+        return false;
     }
 
     /** Walkable tile inside the current dungeon screen (out of bounds is wall). */
@@ -553,6 +575,22 @@ public final class Sim {
         link.facing = d;
         int nx = link.tx + d.dx, ny = link.ty + d.dy;
         if (nx >= 0 && nx < World.SCREEN_W && ny >= 0 && ny < World.SCREEN_H) {
+            if (blockOccupies(nx, ny)) {
+                // a shove: the block moves 1 tile when the far tile is clear,
+                // and Link takes the tile the block just left
+                int fx = nx + d.dx, fy = ny + d.dy;
+                Tile far = (fx >= 0 && fx < World.SCREEN_W && fy >= 0 && fy < World.SCREEN_H)
+                        ? s.grid().get(fx, fy) : Tile.DUNGEON_WALL;
+                if (!far.walkable || far == Tile.DOOR || far == Tile.DUNGEON_EXIT
+                        || blockOccupies(fx, fy) || enemyOccupies(fx, fy) || lootAt(fx, fy)) {
+                    return false; // blocked: the block stays put, so does Link
+                }
+                dungeonRun.pushBlock(dungeonScreenIndex(), s,
+                        new ScreenPos(0, 0, nx, ny), new ScreenPos(0, 0, fx, fy));
+                link.tx = nx;
+                link.ty = ny;
+                return true;
+            }
             Tile t = s.grid().get(nx, ny);
             if (t == Tile.DOOR) {
                 Map.Entry<Link.Dir, DungeonScreen.Door> at = s.doorAt(nx, ny);
@@ -587,14 +625,31 @@ public final class Sim {
         return false;
     }
 
+    /** Live (non-spawning) enemies occupying a tile; a block never lands on one. */
+    private boolean enemyOccupies(int tx, int ty) {
+        for (Enemy e : enemies) {
+            if (e.alive && e.spawning <= 0 && e.tx == tx && e.ty == ty) return true;
+        }
+        return false;
+    }
+
     /** Walking onto the overworld entrance tile enters the dungeon. */
     private void enterDungeonIfStandingOnEntrance() {
         if (inDungeon || inCave() || phase != Phase.PLAYING) return;
         if (!world.isEntrance(link.sx, link.sy, link.tx, link.ty)) return;
+        enterDungeonFromOverworld();
+    }
+
+    /**
+     * The one entry path: arrive at the entrance screen's inner tile. Dark
+     * screens are dark again (the visit's lighting is per-visit).
+     */
+    private void enterDungeonFromOverworld() {
         DungeonScreen entry = dungeon.entry();
         ScreenPos e = entry.exitTile();
         Link.Dir inward = entry.exitInward();
         inDungeon = true;
+        litScreens.clear(); // dark screens reset on re-entry
         link.sx = dungeon.indexOf(entry.id());
         link.sy = 0;
         link.tx = e.tx() + inward.dx;
@@ -611,6 +666,7 @@ public final class Sim {
     /** Stepping off the exit tile: back to the overworld, beside the entrance. */
     private void leaveDungeonToOverworld() {
         inDungeon = false;
+        litScreens.clear(); // the visit is over; its lighting went with it
         ScreenPos en = world.dungeonEntrance();
         // any walkable neighbour of the entrance, never the entrance tile itself
         int ax = en.tx(), ay = en.ty();
@@ -653,6 +709,29 @@ public final class Sim {
                 autosave();
             }
         }
+        // loot revealed by a block trigger: invisible until that first push
+        for (Lootable h : s.hiddenLoot()) {
+            if (dungeonRun.revealed(h.id()) && h.tx() == link.tx && h.ty() == link.ty
+                    && !dungeonRun.taken(h.id())) {
+                dungeonRun.takeItem(h.id());
+                autosave();
+            }
+        }
+    }
+
+    // ---- T10: dark screens and shoveable blocks -----------------------------
+
+    /** True when this dungeon screen is obscured: authored dark, not yet lit this visit. */
+    public boolean screenIsDark() {
+        return inDungeon && dungeonScreen().dark() && !litScreens.contains(dungeonScreenIndex());
+    }
+
+    /**
+     * Light the current dungeon screen for the rest of this visit. Called by
+     * {@link #castLight()}; a no-op on a screen that is not dark.
+     */
+    private void lightDungeonScreen() {
+        if (inDungeon && dungeonScreen().dark()) litScreens.add(dungeonScreenIndex());
     }
 
     static Link.Dir opposite(Link.Dir d) {
@@ -1071,6 +1150,7 @@ public final class Sim {
             ScreenPos e = entry.exitTile();
             Link.Dir inward = entry.exitInward();
             inDungeon = true;
+            litScreens.clear(); // respawn starts a new visit: dark screens are dark again
             link.sx = dungeon.indexOf(entry.id());
             link.sy = 0;
             link.tx = e.tx() + inward.dx;

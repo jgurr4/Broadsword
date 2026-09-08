@@ -26,6 +26,7 @@ public class GameScreen implements Screen {
     private final TextureRegion[] tileRegions;
     private final TextureRegion keySprite;
     private final TextureRegion chestSprite;
+    private final TextureRegion blockSprite;
 
     private final BitmapFont font = new BitmapFont();
     private final GlyphLayout layout = new GlyphLayout();
@@ -46,6 +47,7 @@ public class GameScreen implements Screen {
                 .toArray(new TextureRegion[0]);
         this.keySprite = TextureGen.region(sprites, TextureGen.SPRITE_KEY);
         this.chestSprite = TextureGen.region(sprites, TextureGen.SPRITE_CHEST);
+        this.blockSprite = TextureGen.region(sprites, TextureGen.SPRITE_BLOCK);
     }
 
     @Override
@@ -126,6 +128,22 @@ public class GameScreen implements Screen {
                 }
                 b.draw(tileRegions[t.ordinal()], x * GameConfig.TILE, (World.SCREEN_H - 1 - y) * GameConfig.TILE);
                 b.setColor(1, 1, 1, 1);
+            }
+        }
+        // shoveable blocks at their live positions (pushed blocks stay pushed)
+        if (sim.inDungeon()) {
+            for (com.jmgurr.broadsword.model.ScreenPos p : sim.dungeonRun()
+                    .blocks(sim.dungeonScreenIndex(), sim.dungeonScreen())) {
+                b.draw(blockSprite, p.tx() * GameConfig.TILE, (World.SCREEN_H - 1 - p.ty()) * GameConfig.TILE);
+            }
+        }
+        // loot revealed by a block trigger: only visible once revealed
+        if (sim.inDungeon()) {
+            for (com.jmgurr.broadsword.model.Lootable loot : sim.dungeonScreen().hiddenLoot()) {
+                if (sim.dungeonRun().revealed(loot.id()) && !sim.dungeonRun().taken(loot.id())) {
+                    b.draw(chestSprite, loot.tx() * GameConfig.TILE,
+                            (World.SCREEN_H - 1 - loot.ty()) * GameConfig.TILE);
+                }
             }
         }
         // Light beam: two tiles straight ahead of the facing it was cast along
@@ -226,6 +244,23 @@ public class GameScreen implements Screen {
                 case UP -> b.draw(TextureGen.region(sprites, 6), linkPxX + (GameConfig.TILE - w) / 2, linkPxY + GameConfig.TILE * 0.4f, w, h);
                 case DOWN -> b.draw(TextureGen.region(sprites, 6), linkPxX + (GameConfig.TILE - w) / 2, linkPxY + GameConfig.TILE * 0.6f, w, -h);
             }
+        }
+        // Dark screen: drawn over the whole room (enemies and Link included) so
+        // everything is obscured. The sprites underneath keep moving: the
+        // enemies in the dark are fully active.
+        if (sim.screenIsDark()) {
+            b.setColor(0.02f, 0.02f, 0.04f, 0.94f);
+            b.draw(TextureGen.region(ui, 2), 0, 0, GameConfig.LOGICAL_W, GameConfig.LOGICAL_H);
+            b.setColor(1, 1, 1, 0.08f); // faint wall outlines so the room still reads
+            for (int y = 0; y < World.SCREEN_H; y++) {
+                for (int x = 0; x < World.SCREEN_W; x++) {
+                    if (!sim.dungeonScreen().grid().get(x, y).walkable) {
+                        b.draw(TextureGen.region(ui, 2), x * GameConfig.TILE,
+                                (World.SCREEN_H - 1 - y) * GameConfig.TILE);
+                    }
+                }
+            }
+            b.setColor(1, 1, 1, 1);
         }
         // HUD: hearts top-left (filled vs. lost), magic below (both inset from the top edge)
         for (int i = 0; i < World.MAX_HEARTS; i++) {

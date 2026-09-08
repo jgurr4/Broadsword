@@ -246,6 +246,18 @@ public final class TextureGen {
                             c = new Color(0.3f, 0.2f, 0.1f, 1); // edge
                         }
                     }
+                    case 14 -> {
+                        // Shoveable block: a carved stone cube with bevelled faces
+                        if (lx >= 1 && lx <= 13 && ly >= 1 && ly <= 13) {
+                            c = new Color(0.5f, 0.48f, 0.55f, 1);
+                        }
+                        if (lx >= 3 && lx <= 11 && ly >= 3 && ly <= 11) {
+                            c = new Color(0.62f, 0.6f, 0.68f, 1); // raised face
+                        }
+                        if (lx == 1 || lx == 13 || ly == 1 || ly == 13) {
+                            c = new Color(0.3f, 0.29f, 0.36f, 1); // edge
+                        }
+                    }
                     case 11 -> {
                         // Flute: a pale gold pipe lying on the ground
                         if (lx >= 3 && lx <= 11 && ly >= 6 && ly <= 8) {
@@ -277,8 +289,9 @@ public final class TextureGen {
         return new Texture(pm);
     }
 
-    /** Sprite strip cells: Link, Grunt, sword, Octorock, fireball, Link-left, sword-up, shield, cloud, Link-back, Ghost, Flute, Key, Chest. */
-    public static final int SPRITE_CELLS = 14;
+    /** Sprite strip cells: Link, Grunt, sword, Octorock, fireball, Link-left, sword-up, shield, cloud, Link-back, Ghost, Flute, Key, Chest, Block. */
+    public static final int SPRITE_CELLS = 15;
+    public static final int SPRITE_BLOCK = 14;
     public static final int SPRITE_GHOST = 10;
     public static final int SPRITE_FLUTE = 11;
     public static final int SPRITE_KEY = 12;

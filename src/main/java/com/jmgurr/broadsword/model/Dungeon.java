@@ -24,11 +24,15 @@ import java.util.Map;
  * </pre>
  *
  * Grid chars: '#' wall, '.' floor, 'd' door, 'L' locked door, 'E' overworld
- * exit, 'k' key, 'i' item, 'B' block (stored for T10; inert in T9), 'g' grunt,
- * 'o' octorock, 'H' hydra (boss tile; T11 spawns it). Door connectivity comes
+ * exit, 'k' key, 'i' item, 'B' shoveable block, 'g' grunt, 'o' octorock,
+ * 'H' hydra (boss tile; T11 spawns it). Door connectivity comes
  * from the header ({@code doors: <DIR>=<id>[(locked)] ...}); the door tile is
  * wherever the grid shows 'd'/'L' on that edge. Doors are two-way: every
  * declared door must have a matching door on the target's opposite edge.
+ *
+ * <p>A line {@code trigger: B@(x,y) -> i@(x,y)} under a screen header binds a
+ * block's first push to revealing the hidden item at the target tile. The item
+ * is invisible and untouchable until that first push.
  */
 public final class Dungeon {
 
@@ -88,6 +92,9 @@ public final class Dungeon {
             for (Lootable l : s.items()) {
                 if (l.id() == lootId) return true;
             }
+            for (Lootable l : s.hiddenLoot()) {
+                if (l.id() == lootId) return true;
+            }
         }
         return false;
     }
@@ -126,6 +133,7 @@ public final class Dungeon {
         List<Raw> raws = new ArrayList<>();
         Raw current = null;
         int lineNo = 0;
+        List<TriggerDecl> triggers = new ArrayList<>();
 
         for (String raw : text.split("\n", -1)) {
             lineNo++;
@@ -153,7 +161,11 @@ public final class Dungeon {
                 raws.add(current);
                 continue;
             }
-            if (line.startsWith("trigger:")) continue; // T10 (shoveable blocks)
+            if (line.startsWith("trigger:")) {
+                if (current == null) throw error(name, lineNo, "trigger before any screen header");
+                triggers.add(parseTrigger(name, lineNo, current.id, line));
+                continue;
+            }
             if (current == null) throw error(name, lineNo, "grid row before any screen header");
             throw error(name, lineNo, "not a grid row: " + line);
         }
@@ -164,6 +176,12 @@ public final class Dungeon {
         List<DungeonScreen> screens = new ArrayList<>();
         int nextLootId = 0;
         for (Raw r : raws) {
+            r.triggers.addAll(triggers.stream().filter(t -> t.screenId.equals(r.id)).toList());
+            for (TriggerDecl t : r.triggers) {
+                if (r.hidden.stream().anyMatch(h -> h.tx() == t.itemX && h.ty() == t.itemY))
+                    throw error(name, 0, r.id + ": two triggers target " + t.itemX + "," + t.itemY);
+                r.hidden.add(new Lootable(-1, t.itemX, t.itemY));
+            }
             DungeonScreen s = buildScreen(name, r);
             int[] id = { nextLootId };
             screens.add(s.withLootIds(id));
@@ -269,6 +287,7 @@ public final class Dungeon {
         List<Lootable> items = new ArrayList<>();
         List<EnemySpawn> enemies = new ArrayList<>();
         List<ScreenPos> blocks = new ArrayList<>();
+        List<Lootable> hidden = new ArrayList<>(r.hidden);
         for (int y = 0; y < World.SCREEN_H; y++) {
             String row = r.rows.get(y);
             for (int x = 0; x < World.SCREEN_W; x++) {
@@ -293,7 +312,31 @@ public final class Dungeon {
                 }
             }
         }
-        return DungeonScreen.of(r.id, grid, dark, exit, boss, keys, items, enemies, blocks);
+        // link each trigger's block tile to its hidden loot (matching by item tile)
+        Map<ScreenPos, Lootable> triggers = new java.util.LinkedHashMap<>();
+        for (TriggerDecl t : r.triggers) {
+            if (!blocks.contains(new ScreenPos(0, 0, t.blockX, t.blockY)))
+                throw error(dungeon, 0, r.id + ": trigger names no block at " + t.blockX + "," + t.blockY);
+            Lootable loc = hidden.stream().filter(h -> h.tx() == t.itemX && h.ty() == t.itemY).findFirst()
+                    .orElseThrow(() -> error(dungeon, 0, r.id + ": trigger target missing"));
+            triggers.put(new ScreenPos(0, 0, t.blockX, t.blockY), loc);
+        }
+        return DungeonScreen.of(r.id, grid, dark, exit, boss, keys, items, hidden, enemies, blocks, triggers);
+    }
+
+    /** trigger: B@(x,y) -> i@(x,y) under the screen it belongs to. */
+    private static TriggerDecl parseTrigger(String dungeon, int lineNo, String screenId, String line) {
+        java.util.regex.Matcher m = TRIGGER.matcher(line);
+        if (!m.matches())
+            throw error(dungeon, lineNo, "expected trigger: B@(x,y) -> i@(x,y), got: " + line);
+        return new TriggerDecl(screenId, Integer.parseInt(m.group(1)), Integer.parseInt(m.group(2)),
+                Integer.parseInt(m.group(3)), Integer.parseInt(m.group(4)));
+    }
+
+    private static final java.util.regex.Pattern TRIGGER = java.util.regex.Pattern
+            .compile("trigger:\\s*B@\\((\\d+),(\\d+)\\)\\s*->\\s*i@\\((\\d+),(\\d+)\\)");
+
+    private record TriggerDecl(String screenId, int blockX, int blockY, int itemX, int itemY) {
     }
 
     private static Link.Dir opposite(Link.Dir d) {
@@ -308,7 +351,7 @@ public final class Dungeon {
     /** A line of nothing but grid characters (walls may start with '#'). */
     private static boolean isGridRow(String line) {
         if (line.isEmpty()) return false;
-        return line.chars().allMatch(c -> "#.dLEkigoH".indexOf(c) >= 0);
+        return line.chars().allMatch(c -> "#.dLEkigoHB".indexOf(c) >= 0);
     }
 
     private static String between(String line, String marker, String def) {
@@ -328,6 +371,9 @@ public final class Dungeon {
         final List<String> rows = new ArrayList<>();
         final Map<Link.Dir, String> rawDoors = new java.util.EnumMap<>(Link.Dir.class);
         final java.util.EnumSet<Link.Dir> locked = java.util.EnumSet.noneOf(Link.Dir.class);
+        final List<ScreenPos> blocks = new ArrayList<>();
+        final List<Lootable> hidden = new ArrayList<>();
+        final List<TriggerDecl> triggers = new ArrayList<>();
         boolean dark;
 
         Raw(String id, String headerRest) {

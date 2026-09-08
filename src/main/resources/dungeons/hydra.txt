@@ -6,9 +6,13 @@
 # 'd' = open door           'L' = locked door (header carries the lock flag)
 # 'E' = overworld exit      'k' = key           'i' = item
 # 'g' = grunt               'o' = octorock      'H' = hydra (boss, T11)
-# 'B' = shoveable block, 'trigger:' line, 'dark: true' -> T10
+# 'B' = shoveable block        'trigger: B@(x,y) -> i@(x,y)' = first push of
+#      the block at (x,y) reveals the hidden item at (x,y)   'dark: true' -> dark screen
 
 [s01] doors: E=s02 S=s05
+# the block in the south corridor will not shove north into the vault wall;
+# its first shove (east or west) reveals the chest under where the block stood
+trigger: B@(7,8) -> i@(7,8)
 ################
 #..............#
 #..............#
@@ -17,7 +21,7 @@
 E..............d
 #....#....#....#
 #....######....#
-#..............#
+#......B.......#
 ########d#######
 
 [s02] doors: W=s01 E=s03 S=s06
@@ -81,12 +85,13 @@ d..............d
 ################
 
 [s07] doors: N=s03 W=s06 dark: true
+# dark, and the block in the east-open box will not shove west into its wall
 ########d#######
 #..............#
 #.........k....#
 #..............#
 #.....####.....#
-d.....#........#
+d.....#.B......#
 #.....####.....#
 #..............#
 #..............#
