@@ -80,8 +80,11 @@ public final class TextureGen {
         return new Texture(pm);
     }
 
+    /** UI strip cells: 0 Heart, 1 Magic pip, 2 spark, 3 half Heart, 4 solid white (scrim). */
+    public static final int UI_SOLID = 4;
+
     public static Texture ui() {
-        int w = 4 * GameConfig.TILE;
+        int w = (UI_SOLID + 1) * GameConfig.TILE;
         Pixmap pm = new Pixmap(w, GameConfig.TILE, Pixmap.Format.RGBA8888);
         for (int x = 0; x < w; x++) {
             for (int y = 0; y < GameConfig.TILE; y++) {
@@ -102,6 +105,8 @@ public final class TextureGen {
                         if (lx >= 7) break;
                         c = heart(lx, ly) ? new Color(0.85f, 0.15f, 0.15f, 1) : Color.CLEAR;
                     }
+                    // solid white: tinted by the batch color for scrims and fills
+                    case 4 -> c = Color.WHITE;
                 }
                 pm.setColor(c);
                 pm.drawPixel(x, y);

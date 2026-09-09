@@ -7,9 +7,10 @@ import com.badlogic.gdx.utils.Scaling;
 import com.badlogic.gdx.utils.viewport.ScalingViewport;
 import com.jmgurr.broadsword.model.SaveState;
 import com.jmgurr.broadsword.model.Sim;
-import com.jmgurr.broadsword.model.World;
 
 public class BroadswordGame extends Game {
+    /** The run-level state machine shared by title, gameplay, and the overlays. */
+    private GameState state = GameState.TITLE;
     private SpriteBatch batch;
     private final ScalingViewport viewport = new ScalingViewport(Scaling.fit, GameConfig.LOGICAL_W, GameConfig.LOGICAL_H);
     private Texture tiles;
@@ -28,14 +29,33 @@ public class BroadswordGame extends Game {
         setScreen(new TitleScreen(this));
     }
 
-    /** New game: fresh seed, spawn position; the new run overwrites the save immediately. */
-    public void newGame() {
-        setScreen(new GameScreen(this, new Sim(World.randomSeed())));
+    /** New game on the given seed (typed at the title, or random); overwrites the save. */
+    public void newGame(long seed) {
+        goTo(GameState.PLAYING);
+        setScreen(new GameScreen(this, new Sim(seed)));
     }
 
     /** Continue: re-derive the saved world and resume at the saved position. */
     public void continueGame(SaveState save) {
+        goTo(GameState.PLAYING);
         setScreen(new GameScreen(this, new Sim(save)));
+    }
+
+    /** Move the run state machine; staying put is not a transition, an illegal move throws. */
+    void goTo(GameState to) {
+        if (state == to) {
+            return;
+        }
+        if (!state.canTransitionTo(to)) {
+            throw new IllegalStateException(state + " -> " + to);
+        }
+        state = to;
+    }
+
+    /** Leave the run for the title screen; the next game starts from TITLE again. */
+    void toTitle() {
+        goTo(GameState.TITLE);
+        setScreen(new TitleScreen(this));
     }
 
     @Override

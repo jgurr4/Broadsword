@@ -60,15 +60,24 @@ public class GameScreen implements Screen {
         if (Gdx.input.isKeyJustPressed(Input.Keys.G)) {
             sim.playFlute(); // the tune: dispels this screen's Ghosts, once per visit
         }
-        if (sim.phase() == Sim.Phase.GAME_OVER && Gdx.input.isKeyJustPressed(Input.Keys.R)) {
+        GameState state = GameState.of(sim.phase());
+        if (state == GameState.GAME_OVER && Gdx.input.isKeyJustPressed(Input.Keys.R)) {
+            game.goTo(GameState.PLAYING);
             sim.respawn();
+            state = GameState.PLAYING;
         }
-        if (sim.won() && Gdx.input.isKeyJustPressed(Input.Keys.T)) {
-            game.setScreen(new TitleScreen(game)); // the autosave keeps the cleared dungeon
+        if ((state == GameState.VICTORY || state == GameState.GAME_OVER)
+                && Gdx.input.isKeyJustPressed(Input.Keys.T)) {
+            game.toTitle(); // the autosave keeps the cleared dungeon
             return;
         }
+        if (state == GameState.PLAYING && Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE)) {
+            game.toTitle();
+            return;
+        }
+        game.goTo(state); // tracks the sim; a phase jump the machine forbids throws
         sim.tick(Math.min(delta, 0.1f), desired, swing);
-        draw();
+        draw(state);
     }
 
     /** Draw the UI cell at (x, y) in a given color, tinting the region white base. */
@@ -94,11 +103,27 @@ public class GameScreen implements Screen {
         return null;
     }
 
-    private void draw() {
+    private void draw(GameState state) {
         Link link = sim.link();
         SpriteBatch b = game.batch();
         b.setProjectionMatrix(game.viewport().getCamera().combined);
         b.begin();
+        // A run that has ended draws an empty room, never the field it died on:
+        // no entities, no beams, no dark-screen scrim lingering under the overlay.
+        if (state != GameState.PLAYING) {
+            b.setColor(0.06f, 0.06f, 0.09f, 1f);
+            b.draw(TextureGen.region(ui, TextureGen.UI_SOLID), 0, 0,
+                    GameConfig.LOGICAL_W, GameConfig.LOGICAL_H);
+            b.setColor(1, 1, 1, 1);
+            if (state == GameState.GAME_OVER) {
+                GameUi.overlay(b, font, ui, "GAME OVER", "press R - respawn", "press T - title");
+            } else {
+                GameUi.overlay(b, font, ui, "THE HYDRA FALLS", "The Triforce is yours.",
+                        "seed " + sim.world().seed(), "press T - return to title");
+            }
+            b.end();
+            return;
+        }
         float linkPxX, linkPxY;
         if (sim.interpolating()) {
             // interpolation only happens within one screen: screen-local start + progress
@@ -270,57 +295,18 @@ public class GameScreen implements Screen {
             }
             b.setColor(1, 1, 1, 1);
         }
-        // HUD: hearts top-left (full, half, or lost), magic below (both inset from the top edge)
-        for (int i = 0; i < World.MAX_HEARTS; i++) {
-            float remain = link.hearts - i;
-            int cell = remain >= 1f ? 0 : (remain >= 0.5f ? 3 : -1);
-            if (cell < 0) {
-                drawUiCell(b, 0, 3 + i * 12, GameConfig.LOGICAL_H - 19,
-                        new com.badlogic.gdx.graphics.Color(0.3f, 0.3f, 0.3f, 1f));
-            } else {
-                b.setColor(com.badlogic.gdx.graphics.Color.WHITE);
-                b.draw(TextureGen.region(ui, cell), 3 + i * 12, GameConfig.LOGICAL_H - 19);
-                b.setColor(1, 1, 1, 1);
-            }
-        }
-        // Magic pips: spent by Spells, which V1 has none of, so they stay bright
-        for (int i = 0; i < GameConfig.MAX_MAGIC; i++) {
-            drawUiCell(b, 1, 3 + i * 12, GameConfig.LOGICAL_H - 38,
-                    i < sim.magic() ? com.badlogic.gdx.graphics.Color.WHITE
-                            : new com.badlogic.gdx.graphics.Color(0.3f, 0.3f, 0.3f, 1f));
-        }
-        // Fire: one charge per screen entered, no Magic spent
-        drawUiCell(b, 2, 3, GameConfig.LOGICAL_H - 57,
+        // Fire: one charge per screen entered, no Magic spent (below the Hearts)
+        drawUiCell(b, 2, 3, GameConfig.LOGICAL_H - 38,
                 sim.fireReady() ? com.badlogic.gdx.graphics.Color.WHITE
                         : new com.badlogic.gdx.graphics.Color(0.3f, 0.3f, 0.3f, 1f));
-        // Keys held, inside a dungeon
+        // Keys held, inside a dungeon (below the Fire charge)
         if (sim.inDungeon()) {
             layout.setText(font, "x " + sim.dungeonRun().keys());
-            font.draw(b, layout, 3, GameConfig.LOGICAL_H - 66);
-            b.draw(keySprite, 15, GameConfig.LOGICAL_H - 81);
+            font.draw(b, layout, 3, GameConfig.LOGICAL_H - 47);
+            b.draw(keySprite, 15, GameConfig.LOGICAL_H - 62);
         }
-
-        if (sim.won()) {
-            b.setColor(0f, 0f, 0.08f, 0.82f);
-            b.draw(TextureGen.region(ui, 2), 0, 0, GameConfig.LOGICAL_W, GameConfig.LOGICAL_H);
-            b.setColor(1, 1, 1, 1);
-            String[] lines = {
-                    "THE HYDRA FALLS", "The Triforce is yours.",
-                    "seed " + sim.world().seed(), "press T - return to title" };
-            float y = GameConfig.LOGICAL_H / 2f + 20;
-            for (String line : lines) {
-                layout.setText(font, line);
-                font.draw(b, layout, (GameConfig.LOGICAL_W - layout.width) / 2, y);
-                y -= 14;
-            }
-        }
-        if (sim.phase() == Sim.Phase.GAME_OVER) {
-            layout.setText(font, "GAME OVER");
-            font.draw(b, "GAME OVER", (GameConfig.LOGICAL_W - layout.width) / 2, GameConfig.LOGICAL_H / 2f + 6);
-            layout.setText(font, "press R to respawn");
-            font.draw(b, "press R to respawn",
-                    (GameConfig.LOGICAL_W - layout.width) / 2, GameConfig.LOGICAL_H / 2f - 10);
-        }
+        // The HUD goes on last so it stays above the dark-screen scrim too.
+        GameUi.hud(b, ui, sim);
         // dev readout: what the screen is (a landmark overrides its archetype),
         // screen:tiles and the direction the input layer sees
         World world = sim.world();
@@ -332,10 +318,8 @@ public class GameScreen implements Screen {
                 link.sx, link.sy, link.tx, link.ty,
                 desired == null ? "-" : desired.name(), ent.sx(), ent.sy());
         layout.setText(font, dbg);
-        // y-up camera: y is the text baseline; place by ascent so the glyph tops
-        // sit 2px below the top edge, 4px in from the right edge
-        float textY = GameConfig.LOGICAL_H - font.getAscent() - 2;
-        font.draw(b, dbg, GameConfig.LOGICAL_W - layout.width - 4, textY);
+        // along the bottom edge, clear of the HUD row at the top
+        font.draw(b, dbg, 3, 3 + font.getCapHeight());
         b.end();
     }
 
