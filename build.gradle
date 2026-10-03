@@ -23,6 +23,13 @@ dependencies {
 
 application {
     mainClass = 'com.jmgurr.broadsword.Main'
+
+    // libGDX's LWJGL3 backend initializes GLFW on the process's first thread, but on macOS
+    // the JVM only runs main() on that thread when started with -XstartOnFirstThread.
+    // Without it GLFW aborts at startup. macOS-only, so pass it nowhere else.
+    if (System.getProperty('os.name').toLowerCase().contains('mac')) {
+        applicationDefaultJvmArgs = ['-XstartOnFirstThread']
+    }
 }
 
 test {
